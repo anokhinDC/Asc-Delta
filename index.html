@@ -1,296 +1,50 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Expedition 33 - Expedição</title>
-
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
-    <!-- Tailwind CSS (CDN) -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        gold: '#EDE3D2',
-                        'gold-dark': '#262422',
-                    },
-                    fontFamily: {
-                        cinzel: ['Cinzel', 'serif'],
-                        inter: ['Inter', 'sans-serif'],
-                    }
-                }
-            }
-        }
-    </script>
-    <!-- FontAwesome for Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="style.css?v=38">
-
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Beyond Depths</title>
+  <meta name="description" content="Biblioteca de Lúmia: fichas, habilidades, pictos, arsenal e bestiário da Expedição Delta.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/lumia.css">
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 </head>
-<body class="text-gray-200 font-inter antialiased h-screen w-screen overflow-hidden flex flex-col md:flex-row relative">
-    <script>window.currentTab = 'chars';</script>
-    <script src="includes/sidebar.js"></script>
+<body>
+  <div class="canvas" aria-hidden="true"></div>
+  <div class="snow" aria-hidden="true"></div>
+  <div class="numeral" data-numeral aria-hidden="true"></div>
 
-<!-- Main Dashboard -->
-    <main class="flex-1 h-full overflow-y-auto relative p-4 md:p-8">
-        
-        <!-- Mobile Header (Hamburger) -->
-        <div class="md:hidden flex justify-between items-center mb-6 glass-panel p-3 rounded-lg sticky top-0 z-30 shadow-lg bg-black/80 backdrop-blur">
-            <button onclick="toggleSidebar()" class="text-gold text-2xl px-3 py-1 hover:text-white transition"><i class="fa-solid fa-bars"></i></button>
-            <h1 class="text-xl font-cinzel text-gold tracking-widest font-bold">Expedition 33</h1>
-            <div class="w-10"></div> <!-- spacer for centering -->
-        </div>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <filter id="brush" x="-10%" y="-30%" width="120%" height="160%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.035 0.6" numOctaves="3" seed="7" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="9" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </svg>
 
-        <div id="no-char-selected" class="h-full flex flex-col items-center justify-center text-gray-500 pb-20">
-            <i class="fa-solid fa-skull text-6xl mb-4 opacity-50"></i>
-            <h2 class="text-2xl font-cinzel">Selecione um Personagem</h2>
-        </div>
+  <header class="topbar">
+    <button class="icon-btn" data-menu aria-label="Menu"><span>≡</span></button>
+    <div class="t">Beyond <em>Depths</em></div>
+  </header>
 
-        <div id="dashboard-container" class="max-w-4xl mx-auto space-y-6 hidden pb-20">
-            <!-- Header Info -->
-            <div class="flex flex-col md:flex-row justify-between items-center md:items-start glass-panel p-6 rounded-lg gap-6 text-center md:text-left relative">
-                <div class="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
-                    <img id="dash-avatar" src="" alt="Avatar" class="w-20 h-20 md:w-16 md:h-16 rounded-full border-2 border-gold object-cover hidden">
-                    <div class="max-w-full">
-                        <h2 id="dash-name" class="text-3xl md:text-4xl font-cinzel text-gold mb-1 break-words">Nome do Personagem</h2>
-                        <p id="dash-class" class="text-lg text-gray-300">Classe</p>
-                        <p id="dash-gender-orientation" class="text-sm text-purple-400 mt-1 italic hidden"></p>
-                    </div>
-                </div>
-                <div class="flex flex-col items-center md:items-end w-full md:w-auto shrink-0 mt-2 md:mt-0">
-                    <span id="dash-condition" class="badge badge-normal mb-3 md:mb-0">Normal</span>
-                    <div class="mt-0 md:mt-4 flex gap-3 justify-center md:justify-end">
-                        <button id="btn-export-char" class="btn-icon text-lg md:text-base" title="Exportar Personagem"><i class="fa-solid fa-file-export"></i></button>
-                        <button id="btn-edit-char" class="btn-icon text-lg md:text-base" title="Editar Atributos"><i class="fa-solid fa-pen"></i></button>
-                        <button id="btn-delete-char" class="btn-icon text-lg md:text-base text-red-400 hover:text-red-300" title="Excluir"><i class="fa-solid fa-trash"></i></button>
-                    </div>
-                    <div class="mt-4 md:mt-2 w-full md:w-auto text-center md:text-right">
-                        <button type="button" class="w-full md:w-auto px-4 py-2 md:px-3 md:py-1 bg-purple-900/40 text-purple-300 text-sm md:text-xs font-bold rounded border border-purple-500/30 hover:bg-purple-800/60 transition" onclick="openExtendedActionsModal()"><i class="fa-solid fa-book-open mr-1"></i> Livro de Ações</button>
-                    </div>
-                </div>
-            </div>
+  <div class="shell">
+    <aside class="nav" data-nav></aside>
+    <main class="main" data-main></main>
+  </div>
 
-            <!-- Main Stats: HP, Stamina, Postura (Guarda), Chroma -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <!-- HP Card -->
-                <div class="absolute left-1/2 -translate-x-1/2 top-4 w-48 bg-black/95 border border-gold/40 text-left p-3 rounded-lg text-xs opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 text-gray-300" id="tt-hp"></div>
-                <div class="glass-card p-5 border-t-2 border-t-red-600 relative overflow-hidden group cursor-help">
-                    <h3 class="font-cinzel text-xl mb-3 flex items-center gap-2"><i class="fa-solid fa-heart text-red-500"></i> HP (Vida)</h3>
-                    <div class="progress-bar-container mb-4">
-                        <div id="bar-hp" class="progress-fill fill-hp" style="width: 100%;"></div>
-                        <div class="progress-text"><span id="val-hp">100</span> / <span id="max-hp">100</span></div>
-                    </div>
-                    <div class="flex flex-wrap gap-1 justify-center">
-                        <button class="btn-icon text-xs" onclick="adjustStat('hp', -5)">-5</button>
-                        <button class="btn-icon text-xs" onclick="adjustStat('hp', -1)">-1</button>
-                        <button class="btn-icon text-xs" onclick="adjustStat('hp', 1)">+1</button>
-                        <button class="btn-icon text-xs" onclick="adjustStat('hp', 5)">+5</button>
-                    </div>
-                </div>
-                <!-- Stamina / PA Card -->
-                <div class="absolute left-1/2 -translate-x-1/2 top-4 w-48 bg-black/95 border border-gold/40 text-left p-3 rounded-lg text-xs opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 text-gray-300" id="tt-st"></div>
-                <div class="glass-card p-5 border-t-2 border-t-sky-500 relative overflow-hidden group cursor-help">
-                    <h3 class="font-cinzel text-xl mb-3 flex items-center gap-2"><i class="fa-solid fa-bolt text-sky-400"></i> PA / Fôlego</h3>
-                    <div class="progress-bar-container mb-4">
-                        <div id="bar-stamina" class="progress-fill fill-stamina" style="width: 100%;"></div>
-                        <div class="progress-text"><span id="val-stamina">100</span> / <span id="max-stamina">100</span></div>
-                    </div>
-                    <div class="flex flex-wrap gap-1 justify-center">
-                        <button class="btn-icon text-xs" onclick="adjustStat('stamina', -5)">-5</button>
-                        <button class="btn-icon text-xs" onclick="adjustStat('stamina', -1)">-1</button>
-                        <button class="btn-icon text-xs" onclick="adjustStat('stamina', 1)">+1</button>
-                        <button class="btn-icon text-xs" onclick="adjustStat('stamina', 5)">+5</button>
-                    </div>
-                </div>
-                <!-- Postura / Guarda (antigo Lust - Break Meter) -->
-                <div class="absolute left-1/2 -translate-x-1/2 top-4 w-48 bg-black/95 border border-gold/40 text-left p-3 rounded-lg text-xs opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 text-gray-300" id="tt-lust"></div>
-                <div class="glass-card p-5 border-t-2 border-t-purple-500 relative overflow-hidden group cursor-help">
-                    <h3 class="font-cinzel text-xl mb-3 flex items-center gap-2"><i class="fa-solid fa-shield-halved text-purple-400"></i> Postura (Guarda)</h3>
-                    <div class="progress-bar-container mb-2">
-                        <div id="bar-lust" class="progress-fill fill-lust" style="width: 0%; background-color: #a855f7;"></div>
-                        <div class="progress-text"><span id="val-lust">0</span> / <span id="max-lust">100</span></div>
-                    </div>
-                    <div class="text-center text-xs text-purple-300 mb-2 font-semibold" id="lust-stage">Guarda Firme (0 / 100)</div>
-                    <div class="flex flex-wrap gap-1 justify-center">
-                        <button class="btn-icon text-xs" onclick="adjustStat('lust', -5)">-5</button>
-                        <button class="btn-icon text-xs" onclick="adjustStat('lust', -1)">-1</button>
-                        <button class="btn-icon text-xs" onclick="adjustStat('lust', 1)">+1</button>
-                        <button class="btn-icon text-xs" onclick="adjustStat('lust', 5)">+5</button>
-                    </div>
-                </div>
-                <!-- Chroma / Tinta Card -->
-                <div class="absolute left-1/2 -translate-x-1/2 top-4 w-48 bg-black/95 border border-gold/40 text-left p-3 rounded-lg text-xs opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 text-gray-300" id="tt-energy"></div>
-                <div class="glass-card p-5 border-t-2 border-t-cyan-500 relative overflow-hidden group cursor-help">
-                    <h3 class="font-cinzel text-xl mb-3 flex items-center gap-2"><i class="fa-solid fa-palette text-cyan-400"></i> Chroma (Tinta)</h3>
-                    <div class="progress-bar-container mb-4">
-                        <div id="bar-energy" class="progress-fill fill-energy" style="width: 0%; background-color: #06b6d4;"></div>
-                        <div class="progress-text"><span id="val-energy">0</span> / <span id="max-energy">40</span></div>
-                    </div>
-                    <div class="flex flex-wrap gap-1 justify-center">
-                        <button class="btn-icon action-btn text-xs" onclick="adjustStat('energy', -5)">-5</button>
-                        <button class="btn-icon action-btn text-xs" onclick="adjustStat('energy', -1)">-1</button>
-                        <button class="btn-icon action-btn text-xs" onclick="adjustStat('energy', 1)">+1</button>
-                        <button class="btn-icon action-btn text-xs" onclick="adjustStat('energy', 5)">+5</button>
-                    </div>
-                    
-                    <div class="mt-4 pt-3 border-t border-cyan-500/30">
-                        <button onclick="manualTransmuteLust()" class="w-full py-1.5 px-2 text-xs bg-cyan-950/60 text-cyan-300 border border-cyan-500/40 rounded hover:bg-cyan-900/60 transition flex items-center justify-center gap-1.5">
-                            <i class="fa-solid fa-paintbrush"></i> Canalizar Foco (+Chroma)
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Derived Stats (Dano, Defesas, Esquiva) -->
-            <div class="glass-panel p-6 rounded-lg mb-6 border border-gold/10 bg-black/20 shadow-inner">
-                <h3 class="font-cinzel text-xl text-gold border-b border-gold/20 pb-2 mb-4">Estatísticas de Combate</h3>
-                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 text-center">
-                    <div class="group relative cursor-help">
-                        <div class="text-xs text-gray-400 uppercase tracking-wider mb-1"><i class="fa-solid fa-sword text-red-500"></i> Dano Físico</div>
-                        <div class="text-3xl font-cinzel text-white" id="dash-danfis">0</div>
-                        <div class="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 bg-black/95 border border-gold/40 text-left p-3 rounded-lg text-xs opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 text-gray-300" id="tt-danfis"></div>
-                    </div>
-                    <div class="group relative cursor-help">
-                        <div class="text-xs text-gray-400 uppercase tracking-wider mb-1"><i class="fa-solid fa-palette text-cyan-400"></i> Dano Chroma</div>
-                        <div class="text-3xl font-cinzel text-cyan-300" id="dash-danlust">0</div>
-                        <div class="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 bg-black/95 border border-gold/40 text-left p-3 rounded-lg text-xs opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 text-gray-300" id="tt-danlust"></div>
-                    </div>
-                    <div class="group relative cursor-help">
-                        <div class="text-xs text-gray-400 uppercase tracking-wider mb-1"><i class="fa-solid fa-shield text-gray-400"></i> Defesa Física</div>
-                        <div class="text-3xl font-cinzel text-white" id="dash-df">0</div>
-                        <div class="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 bg-black/95 border border-gold/40 text-left p-3 rounded-lg text-xs opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 text-gray-300" id="tt-df"></div>
-                    </div>
-                    <div class="group relative cursor-help">
-                        <div class="text-xs text-gray-400 uppercase tracking-wider mb-1"><i class="fa-solid fa-shield-halved text-purple-400"></i> Res. Postura</div>
-                        <div class="text-3xl font-cinzel text-purple-300" id="dash-dl">0</div>
-                        <div class="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 bg-black/95 border border-gold/40 text-left p-3 rounded-lg text-xs opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 text-gray-300" id="tt-dl"></div>
-                    </div>
-                    <div class="group relative cursor-help">
-                        <div class="text-xs text-gray-400 uppercase tracking-wider mb-1"><i class="fa-solid fa-person-running text-green-400"></i> Esquiva</div>
-                        <div class="text-3xl font-cinzel text-green-300" id="dash-esq">0</div>
-                        <div class="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 bg-black/95 border border-gold/40 text-left p-3 rounded-lg text-xs opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 text-gray-300" id="tt-esq"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Attributes and Armor -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- Attributes -->
-                <div class="glass-panel p-6 rounded-lg">
-                    <h3 class="font-cinzel text-xl text-gold border-b border-gold/20 pb-2 mb-4">Atributos Base</h3>
-                    <div class="grid grid-cols-2 gap-y-3 gap-x-6 text-sm" id="dash-attributes">
-                        <!-- Populated via JS -->
-                    </div>
-                </div>
-
-                <!-- Equipment Details -->
-                <div class="glass-panel p-6 rounded-lg">
-                    <h3 class="font-cinzel text-xl text-gold border-b border-gold/20 pb-2 mb-4">Equipamentos Ativos</h3>
-                    <div id="dash-equipment-list" class="space-y-3">
-                        <!-- Populated via JS -->
-                        <div class="text-sm text-gray-400">Nenhum equipamento ativo.</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Extended Descriptions -->
-            <div class="grid grid-cols-1 gap-6">
-                <!-- Pictos Cards -->
-                <div class="glass-panel p-6 rounded-lg">
-                    <h3 class="font-cinzel text-xl text-gold border-b border-gold/20 pb-2 mb-4 flex items-center gap-2">
-                        <i class="fa-solid fa-palette text-cyan-400"></i> Pictos &amp; Pinturas Místicas
-                    </h3>
-                    <div id="dash-skills-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <!-- Injetado via JS -->
-                        <div class="text-sm text-gray-400">Nenhum picto registrado.</div>
-                    </div>
-                </div>
-                
-                <!-- Conditions -->
-                <div class="glass-panel p-6 rounded-lg">
-                    <h3 class="font-cinzel text-xl text-gold border-b border-gold/20 pb-2 mb-4 flex items-center gap-2">
-                        <i class="fa-solid fa-triangle-exclamation text-stone-400"></i> Condições &amp; Efeitos de Tinta
-                    </h3>
-                    <div id="dash-conditions" class="text-sm text-gray-300 whitespace-pre-wrap">Nenhuma condição ativa.</div>
-                </div>
-
-                <!-- System Logs -->
-                <div class="glass-panel p-6 rounded-lg">
-                    <h3 class="font-cinzel text-xl text-gold border-b border-gold/20 pb-2 mb-4"><i class="fa-solid fa-scroll text-gray-500 mr-2"></i> Diário da Expedição</h3>
-                    <div id="dash-logs" class="max-h-60 overflow-y-auto space-y-2 text-xs font-mono custom-scrollbar pr-2">
-                        <!-- Logs inseridos via JS -->
-                        <div class="text-gray-500 text-center py-4">Nenhum registro encontrado.</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Armor Custom Details -->
-            <div id="dash-armor-details-panel" class="glass-panel p-6 rounded-lg hidden">
-                <h3 class="font-cinzel text-xl text-gold border-b border-gold/20 pb-2 mb-4">Propriedades do Traje</h3>
-                <div id="dash-armor-desc" class="text-sm text-gray-300 whitespace-pre-wrap">Sem descrição.</div>
-            </div>
-
-            <div class="glass-panel p-6 rounded-lg text-sm text-gray-400 border border-purple-500/20 bg-purple-950/10">
-                <p><i class="fa-solid fa-circle-info text-purple-400 mr-1"></i> <strong>Mecânica de Postura &amp; Ruptura (Break):</strong> Ao encher a barra de Postura (100%), o combatente sofre <strong>Guarda Quebrada (Stagger)</strong>, perdendo esquiva e sofrendo dano crítico dos Nevii.</p>
-                <span id="dash-ecstasy-threshold" class="hidden">--</span>
-            </div>
-        </div>
-
-        <div id="rpg-dashboard-container" class="max-w-6xl mx-auto space-y-6 hidden pb-20">
-            <div class="flex justify-between items-center glass-panel p-6 rounded-lg mb-6 border border-purple-500/20">
-                <div>
-                    <h2 class="text-3xl font-cinzel text-purple-400 mb-1"><i class="fa-solid fa-dragon mr-2"></i> Mesa de RPG</h2>
-                    <p class="text-sm text-gray-300">Rastreador de Combate e Turnos</p>
-                </div>
-                <div class="flex gap-2">
-                    <button id="btn-master-damage" class="btn-icon bg-red-600/20 text-red-400 hover:bg-red-600/40 hidden" title="Mestre: Aplicar Dano"><i class="fa-solid fa-burst"></i></button>
-                    <button id="btn-combat-add" class="btn-gold py-2 px-4 rounded text-sm"><i class="fa-solid fa-plus mr-1"></i> Adicionar Combatente</button>
-                    <button id="btn-combat-next" class="btn-icon bg-purple-600/20 text-purple-400 hover:bg-purple-600/40" title="Próximo Turno"><i class="fa-solid fa-forward-step"></i></button>
-                    <button id="btn-combat-clear" class="btn-icon text-red-400 hover:text-red-300" title="Limpar Combate"><i class="fa-solid fa-trash"></i></button>
-                </div>
-            </div>
-
-            <div class="text-center mb-2">
-                <span class="badge bg-purple-900/50 text-purple-200 border border-purple-500/50 px-4 py-1 text-lg">Rodada <span id="rpg-round-counter">1</span></span>
-            </div>
-
-            <div id="combat-tracker-list" class="space-y-4">
-                <!-- Combatants will be injected here -->
-                <div class="text-center text-gray-500 py-10 glass-panel rounded-lg">
-                    Nenhum combatente na mesa. Adicione personagens ou monstros para começar.
-                </div>
-            </div>
-        </div>
-    </main>
-
-    
-
-    
-
-    <script src="includes/modals.js?v=38"></script>
-
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-
-    <!-- Game Databases -->
-    <script src="js/db/armor.js"></script>
-    <script src="js/db/conditions.js"></script>
-    <script src="js/db/perks.js"></script>
-    <script src="js/db/races.js"></script>
-    <script src="js/db/classes.js"></script>
-
-    <script src="app.js?v=38" defer></script>
-
-    <script src="js/item_manager.js"></script>
-    <script src="js/status_effects.js"></script>
+  <script src="assets/js/rules.js"></script>
+  <script src="assets/js/seed.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script src="assets/js/store.js"></script>
+  <script src="assets/js/views/habilidades.js"></script>
+  <script src="assets/js/views/biblioteca.js"></script>
+  <script src="assets/js/views/fichas.js"></script>
+  <script src="assets/js/views/bestiario.js"></script>
+  <script src="assets/js/views/mestre.js"></script>
+  <script src="assets/js/views/codex.js"></script>
+  <script src="assets/js/app.js"></script>
 </body>
 </html>
-
-
