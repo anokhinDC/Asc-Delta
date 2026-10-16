@@ -2,9 +2,16 @@
   const LD = window.LD;
 
   // Faixas de fundo, tocadas em sequência e repetidas. Basta colocar os arquivos em assets/audio/.
+  // `arquivo` aceita uma lista: o navegador toca o primeiro formato que souber abrir.
   const FAIXAS = [
-    { arquivo: 'assets/audio/tema.mp3', nome: 'Tema' }
+    { arquivo: ['assets/audio/tema.m4a', 'assets/audio/tema.mp3'], nome: 'Tema' }
   ];
+  const TIPOS = { m4a: 'audio/mp4; codecs="mp4a.40.2"', mp4: 'audio/mp4', aac: 'audio/aac', mp3: 'audio/mpeg', ogg: 'audio/ogg', opus: 'audio/ogg; codecs="opus"', wav: 'audio/wav' };
+  function fonte(f) {
+    const lista = [].concat(f.arquivo);
+    const teste = document.createElement('audio');
+    return lista.find((a) => teste.canPlayType(TIPOS[a.split('.').pop().toLowerCase()] || '') !== '') || lista[lista.length - 1];
+  }
   const VOLUME_PADRAO = 0.3;
 
   const guardar = (k, v) => { try { localStorage.setItem('ld_musica_' + k, String(v)); } catch (e) {} };
@@ -59,7 +66,7 @@
   function carregar(i) {
     faixa = (i + FAIXAS.length) % FAIXAS.length;
     guardar('faixa', faixa);
-    audio.src = FAIXAS[faixa].arquivo;
+    audio.src = fonte(FAIXAS[faixa]);
   }
 
   function tocar() {
@@ -88,7 +95,7 @@
     if (!audio.src) return;
     falhou = true;
     atualizar();
-    LD.ui && LD.ui.toast(`Música não encontrada: coloque o arquivo em ${FAIXAS[faixa].arquivo}`, 'erro');
+    LD.ui && LD.ui.toast(`Música não encontrada: coloque o arquivo em ${[].concat(FAIXAS[faixa].arquivo)[0]}`, 'erro');
   });
   audio.addEventListener('ended', () => { if (!audio.loop) { carregar(faixa + 1); tocar(); } });
   audio.addEventListener('play', atualizar);
