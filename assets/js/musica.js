@@ -4,7 +4,9 @@
   // Faixas de fundo, tocadas em sequência e repetidas. Basta colocar os arquivos em assets/audio/.
   // `arquivo` aceita uma lista: o navegador toca o primeiro formato que souber abrir.
   const FAIXAS = [
-    { arquivo: ['assets/audio/tema.m4a', 'assets/audio/tema.mp3'], nome: 'Tema' }
+    { arquivo: ['assets/audio/tema.m4a', 'assets/audio/tema.mp3'], nome: 'Tema I' },
+    { arquivo: 'assets/audio/tema-2.mp3', nome: 'Tema II' },
+    { arquivo: 'assets/audio/tema-3.mp3', nome: 'Tema III' }
   ];
   const TIPOS = { m4a: 'audio/mp4; codecs="mp4a.40.2"', mp4: 'audio/mp4', aac: 'audio/aac', mp3: 'audio/mpeg', ogg: 'audio/ogg', opus: 'audio/ogg; codecs="opus"', wav: 'audio/wav' };
   function fonte(f) {
