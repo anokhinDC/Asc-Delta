@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logado() { return request.auth != null; }
+    function mestre() {
+      return logado() && (request.auth.token.email.matches('^admin@.*') || request.auth.token.email.matches('^mestre@.*'));
+    }
+    function dono() { return logado() && resource.data.ownerId == request.auth.uid; }
+    function criaComoDono() { return logado() && request.resource.data.ownerId == request.auth.uid; }
+
+    // Fichas: todos leem, cada jogador mexe na sua, o mestre mexe em todas.
+    match /lumia_personagens/{id} {
+      allow read: if logado();
+      allow create: if criaComoDono() || mestre();
+      allow update, delete: if dono() || mestre();
+    }
+
+    // Habilidades: jogadores criam as suas; o mestre edita todas.
+    match /lumia_habilidades/{id} {
+      allow read: if logado();
+      allow create: if criaComoDono() || mestre();
+      allow update, delete: if dono() || mestre();
+    }
+
+    // Biblioteca do mestre.
+    match /lumia_pictos/{id}   { allow read: if logado(); allow write: if mestre(); }
+    match /lumia_armas/{id}    { allow read: if logado(); allow write: if mestre(); }
+    match /lumia_itens/{id}    { allow read: if logado(); allow write: if mestre(); }
+    match /lumia_monstros/{id} { allow read: if logado(); allow write: if mestre(); }
+
+    // Painel antigo (pasta legacy/): mantém o acesso de quem está logado.
+    match /characters/{id}         { allow read, write: if logado(); }
+    match /monsters/{id}           { allow read, write: if logado(); }
+    match /global_skills/{id}      { allow read, write: if logado(); }
+    match /global_weapons/{id}     { allow read, write: if logado(); }
+    match /global_armors/{id}      { allow read, write: if logado(); }
+    match /global_accessories/{id} { allow read, write: if logado(); }
+  }
+}
