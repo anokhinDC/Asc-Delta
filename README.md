@@ -30,7 +30,7 @@ Cole o conteúdo de `firestore.rules` em Firestore → Regras. Depois, entre com
 
 ## Música de fundo
 
-O botão ♪ no canto inferior direito toca `assets/audio/tema.m4a` (com `tema.mp3` de reserva para navegadores sem AAC). A música começa no primeiro clique da página. Para trocar ou acrescentar faixas, edite a lista `FAIXAS` em `assets/js/musica.js`.
+O botão ♪ no canto inferior direito toca, em sequência e repetindo, `tema.m4a` (com `tema.mp3` de reserva para navegadores sem AAC), `tema-2.mp3` e `tema-3.mp3`, todos em `assets/audio/`. Ao passar o mouse aparecem o volume e o botão Próxima. A música começa no primeiro clique da página. Para trocar ou acrescentar faixas, edite a lista `FAIXAS` em `assets/js/musica.js`.
 
 ## Estrutura
 
