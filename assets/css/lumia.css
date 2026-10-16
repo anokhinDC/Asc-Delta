@@ -235,6 +235,12 @@ h3 { font-size: 22px; line-height: 1.15; }
 .pip.on { background: var(--gold); box-shadow: 0 0 8px rgba(201, 164, 92, 0.5); }
 .lumia-bar { display: inline-flex; gap: 6px; }
 .lumia-bar .d { width: 13px; height: 13px; border: 1px solid var(--lumia); transform: rotate(45deg); opacity: 0.6; }
+.lumia-bar .d-hit { background: none; border: 0; padding: 5px 3px; margin: -5px -3px; cursor: pointer; display: inline-flex; }
+.lumia-bar .d-hit:hover .d { opacity: 1; box-shadow: 0 0 8px var(--lumia-glow); }
+.lumia-bar .d-hit:focus-visible { outline: 1px solid var(--lumia); outline-offset: 2px; }
+.vital-ctrl { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin-top: 6px; }
+.vital-ctrl input { width: 70px; background: none; border: 0; border-bottom: 1px solid var(--line-2); color: var(--paper); padding: 3px; font: 400 14px var(--ui); }
+.vital-ctrl .btn { padding: 6px 2px; letter-spacing: 0.16em; }
 .lumia-bar .d.on { background: var(--lumia); box-shadow: 0 0 10px var(--lumia-glow); opacity: 1; }
 
 .bar { position: relative; height: 6px; background: rgba(236, 228, 210, 0.08); overflow: hidden; }

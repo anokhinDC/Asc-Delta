@@ -36,7 +36,11 @@
   }
   function lumiaBar(atual, max, interativo) {
     let s = `<span class="lumia-bar" ${interativo ? 'data-lumia-bar' : ''} title="Lúmia ${atual}/${max}">`;
-    for (let i = 0; i < max; i++) s += `<i class="d ${i < atual ? 'on' : ''}" ${interativo ? `data-lumia="${i + 1}" style="cursor:pointer"` : ''}></i>`;
+    for (let i = 0; i < max; i++) {
+      s += interativo
+        ? `<button type="button" class="d-hit" data-lumia="${i + 1}" aria-label="Lúmia ${i + 1}"><i class="d ${i < atual ? 'on' : ''}"></i></button>`
+        : `<i class="d ${i < atual ? 'on' : ''}"></i>`;
+    }
     return s + '</span>';
   }
   function resp(r) {

@@ -106,12 +106,13 @@
               <div class="caps">PV</div>
               <div class="v">${fmt(c.pvAtual)}<small> / ${fmt(d.pvMax)}</small></div>
               <div class="bar" style="margin:8px 0"><i style="width:${Math.max(0, Math.min(100, (c.pvAtual / d.pvMax) * 100))}%"></i></div>
-              ${pode ? `<div style="display:flex;gap:8px;align-items:center"><input type="number" data-pvd placeholder="valor" style="width:80px;background:none;border:0;border-bottom:1px solid var(--line-2);color:var(--paper);padding:3px"><button class="btn plain" data-pv="-">Dano</button><button class="btn plain" data-pv="+">Cura</button><button class="btn plain" data-pv="max">Cheio</button></div>` : ''}
+              ${pode ? `<div class="vital-ctrl"><input type="number" data-pvd placeholder="valor"><button class="btn plain" data-pv="-">Dano</button><button class="btn plain" data-pv="+">Cura</button><button class="btn plain" data-pv="max">Cheio</button></div>` : ''}
             </div>
             <div class="vital">
               <div class="caps">Lúmia</div>
               <div class="v">${esc(c.lumiaAtual)}<small> / ${d.lumiaMax}</small></div>
               <div style="margin-top:10px">${lumiaBar(c.lumiaAtual, d.lumiaMax, pode)}</div>
+              ${pode ? `<div class="vital-ctrl"><button class="btn plain" data-lu="-1">− 1</button><button class="btn plain" data-lu="1">+ 1</button><button class="btn plain" data-lu="max">Cheia</button></div>` : ''}
             </div>
             <div class="vital"><div class="caps">Velocidade</div><div class="v">${d.velocidade}</div></div>
             <div class="vital"><div class="caps">Redução</div><div class="v">${d.reducao}<small>%</small></div><div class="muted" style="font-size:12px">Aguentar: ${Math.min(60, d.reducao * 2)}%</div></div>
@@ -135,9 +136,14 @@
       else c.pvAtual = LD.clamp(c.pvAtual + (b.dataset.pv === '+' ? v : -v), 0, d.pvMax);
       redesenhar();
     }));
+    main.querySelectorAll('[data-lu]').forEach((b) => b.addEventListener('click', () => {
+      const atual = Number(c.lumiaAtual) || 0;
+      c.lumiaAtual = b.dataset.lu === 'max' ? d.lumiaMax : LD.clamp(atual + Number(b.dataset.lu), 0, d.lumiaMax);
+      redesenhar();
+    }));
     main.querySelectorAll('[data-lumia]').forEach((el) => el.addEventListener('click', () => {
       const v = Number(el.dataset.lumia);
-      c.lumiaAtual = c.lumiaAtual === v ? v - 1 : v;
+      c.lumiaAtual = Number(c.lumiaAtual) === v ? v - 1 : v;
       redesenhar();
     }));
 
