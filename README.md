@@ -28,10 +28,6 @@ Os dados novos ficam em coleções próprias, para não misturar com o painel an
 
 Cole o conteúdo de `firestore.rules` em Firestore → Regras. Depois, entre como mestre e, na Oficina, use **Carregar biblioteca inicial** para gravar as habilidades, armas, pictos, itens e criaturas do Ato I.
 
-## Música de fundo
-
-O botão ♪ no canto inferior direito toca `assets/audio/tema.m4a` (com `tema.mp3` de reserva para navegadores sem AAC). A música começa no primeiro clique da página. Para trocar ou acrescentar faixas, edite a lista `FAIXAS` em `assets/js/musica.js`.
-
 ## Estrutura
 
 ```
@@ -42,9 +38,7 @@ assets/js/seed.js           biblioteca inicial
 assets/js/store.js          Firebase e modo local
 assets/js/ui.js             componentes
 assets/js/views/*.js        uma página por arquivo
-assets/js/musica.js         música de fundo
 assets/js/app.js            menu e rotas
-assets/audio/               faixas de música
 legacy/                     painel antigo, ainda acessível em /legacy/
 ```
 
