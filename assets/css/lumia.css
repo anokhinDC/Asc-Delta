@@ -412,6 +412,19 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
   .codex-toc { position: static; flex-direction: row; flex-wrap: wrap; gap: 14px; }
   .grid.three { grid-template-columns: 1fr 1fr; }
 }
+/* ---------- Música de fundo ---------- */
+.musica { position: fixed; right: 26px; bottom: 24px; z-index: 45; display: flex; flex-direction: row-reverse; align-items: center; gap: 16px; }
+.musica .icon-btn { width: 34px; height: 34px; background: rgba(10, 11, 15, 0.82); }
+.musica.tocando .icon-btn { border-color: var(--lumia); color: var(--lumia); box-shadow: 0 0 14px var(--lumia-glow); }
+.musica.falhou .icon-btn { border-color: var(--red); color: var(--red-2); }
+.musica-painel {
+  display: flex; align-items: center; gap: 14px; padding: 8px 14px; background: rgba(10, 11, 15, 0.86); border: 1px solid var(--line);
+  opacity: 0; transform: translateX(8px); pointer-events: none; transition: opacity 0.2s, transform 0.2s;
+}
+.musica:hover .musica-painel, .musica:focus-within .musica-painel { opacity: 1; transform: none; pointer-events: auto; }
+.musica-painel .caps { white-space: nowrap; }
+.musica-painel input[type=range] { width: 110px; accent-color: var(--lumia); }
+
 @media (max-width: 860px) {
   .shell { grid-template-columns: 1fr; }
   .nav { position: fixed; left: 0; top: 0; z-index: 60; width: 290px; transform: translateX(-100%); transition: transform 0.25s; background: #0c0d12; }
@@ -430,6 +443,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
   .attr .ctrl { grid-column: 2 / 4; justify-content: flex-end; }
   .drawer-head, .drawer-body, .drawer-foot { padding-left: 18px; padding-right: 18px; }
   .res-grid { grid-template-columns: 1fr 1fr; }
+  .musica { right: 14px; bottom: 14px; }
 }
 
 /* Campos dentro dos editores de lista */
