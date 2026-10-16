@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Beyond Depths - Habilidades</title>
+    <title>Expedition 33 - Pictos</title>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,8 +16,8 @@
             theme: {
                 extend: {
                     colors: {
-                        gold: '#D4AF37',
-                        'gold-dark': '#aa8a29',
+                        gold: '#EDE3D2',
+                        'gold-dark': '#262422',
                     },
                     fontFamily: {
                         cinzel: ['Cinzel', 'serif'],
@@ -30,7 +30,7 @@
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=38">
 
 </head>
 <body class="text-gray-200 font-inter antialiased h-screen w-screen overflow-hidden flex flex-col md:flex-row relative">
@@ -43,7 +43,7 @@
         <!-- Mobile Header (Hamburger) -->
         <div class="md:hidden flex justify-between items-center mb-6 glass-panel p-3 rounded-lg sticky top-0 z-30 shadow-lg bg-black/80 backdrop-blur">
             <button onclick="toggleSidebar()" class="text-gold text-2xl px-3 py-1 hover:text-white transition"><i class="fa-solid fa-bars"></i></button>
-            <h1 class="text-xl font-cinzel text-gold tracking-widest font-bold">Beyond Depths</h1>
+            <h1 class="text-xl font-cinzel text-gold tracking-widest font-bold">Expedition 33</h1>
             <div class="w-10"></div> <!-- spacer for centering -->
         </div>
 
@@ -95,8 +95,8 @@
                 </div>
                 <!-- Stamina Card -->
                 <div class="absolute left-1/2 -translate-x-1/2 top-4 w-48 bg-black/95 border border-gold/40 text-left p-3 rounded-lg text-xs opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 text-gray-300" id="tt-st"></div>
-                <div class="glass-card p-5 border-t-2 border-t-yellow-500 relative overflow-hidden group cursor-help">
-                    <h3 class="font-cinzel text-xl mb-3 flex items-center gap-2"><i class="fa-solid fa-bolt text-yellow-500"></i> Stamina</h3>
+                <div class="glass-card p-5 border-t-2 border-t-sky-500 relative overflow-hidden group cursor-help">
+                    <h3 class="font-cinzel text-xl mb-3 flex items-center gap-2"><i class="fa-solid fa-bolt text-sky-400"></i> Stamina</h3>
                     <div class="progress-bar-container mb-4">
                         <div id="bar-stamina" class="progress-fill fill-stamina" style="width: 100%;"></div>
                         <div class="progress-text"><span id="val-stamina">100</span> / <span id="max-stamina">100</span></div>
@@ -275,7 +275,7 @@
 
     
 
-    <script src="includes/modals.js"></script>
+    <script src="includes/modals.js?v=38"></script>
 
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
@@ -288,102 +288,7 @@
     <script src="js/db/races.js"></script>
     <script src="js/db/classes.js"></script>
 
-    <script src="app.js?v=13" defer></script>
-
-    <!-- Modal View Perks -->
-    <dialog id="modal-view-perks" class="modal glass-panel border border-gold/30 rounded-xl p-0 w-full max-w-md bg-black/95 shadow-2xl backdrop-blur-md">
-        <div class="p-5 border-b border-gold/20 flex justify-between items-center bg-gradient-to-r from-black/60 to-transparent">
-            <h2 id="modal-vp-title" class="text-2xl font-cinzel text-gold drop-shadow-md">Vantagens</h2>
-            <button type="button" class="btn-icon" onclick="document.getElementById('modal-view-perks').close()"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <div class="p-5 overflow-y-auto max-h-[70vh] space-y-4" id="modal-vp-content">
-            <!-- Populated via JS -->
-        </div>
-    </dialog>
-
-    <!-- Modal: GM Damage Application -->
-    <dialog id="modal-apply-damage" class="bg-gray-900 text-gray-200 p-0 rounded-lg shadow-2xl backdrop:bg-black/80 border border-red-500/30 w-[450px] max-w-[95%]">
-        <div class="p-4 border-b border-gray-800 flex justify-between items-center bg-red-900/20">
-            <h3 class="text-lg font-cinzel font-bold text-red-400"><i class="fa-solid fa-burst mr-2"></i>Aplicar Dano (Mestre)</h3>
-            <button class="btn-icon text-gray-400 hover:text-white" onclick="document.getElementById('modal-apply-damage').close()"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <div class="p-6 space-y-4">
-            <div>
-                <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Quem está Atacando?</label>
-                <select id="inp-dmg-attacker" class="input-dark w-full mb-1" onchange="updateMasterDamageUI()"></select>
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Alvo do Ataque</label>
-                <select id="inp-dmg-target" class="input-dark w-full" onchange="updateMasterDamageUI()"></select>
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Ataque Utilizado</label>
-                <select id="inp-dmg-attack" class="input-dark w-full mb-2" onchange="updateMasterDamageUI()"></select>
-                <input type="text" id="inp-dmg-custom" class="input-dark w-full hidden" placeholder="Rolagem custom (ex: 2d6+4)">
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Tipo de Dano</label>
-                    <select id="inp-dmg-type" class="input-dark w-full">
-                        <option value="HP">Físico (Não-Mágico)</option>
-                        <option value="HP_MAG">Físico (Mágico)</option>
-                        <option value="LUST">Lust (Não-Mágico)</option>
-                        <option value="LUST_MAG">Lust (Mágico)</option>
-                        <option value="MAG">Mágico Puro (HP)</option>
-                        <option value="FOGO">Elemental: Fogo (HP)</option>
-                        <option value="GELO">Elemental: Gelo (HP)</option>
-                        <option value="ELETRICO">Elemental: Elétrico (HP)</option>
-                        <option value="VENENO">Elemental: Veneno/Ácido (HP)</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Condição do Ataque</label>
-                    <select id="inp-dmg-cond" class="input-dark w-full">
-                        <option value="normal">Normal</option>
-                        <option value="vantagem">Com Vantagem</option>
-                        <option value="desvantagem">Com Desvantagem</option>
-                    </select>
-                </div>
-            <div class="grid grid-cols-2 gap-4 mt-2">
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Região Alvo</label>
-                    <select id="inp-dmg-target-zone" class="input-dark w-full">
-                        <option value="Qualquer">Qualquer (Geral)</option>
-                        <option value="Cabeça">Cabeça</option>
-                        <option value="Pescoço">Pescoço</option>
-                        <option value="Nuca">Nuca</option>
-                        <option value="Tronco">Tronco</option>
-                        <option value="Seios">Seios</option>
-                        <option value="Braços">Braços</option>
-                        <option value="Pernas">Pernas</option>
-                        <option value="Bunda">Bunda</option>
-                        <option value="Ânus">Ânus</option>
-                        <option value="Virilha">Virilha</option>
-                        <option value="Pênis">Pênis</option>
-                        <option value="Testículos">Testículos</option>
-                    </select>
-                </div>
-            </div>
-            <div class="grid grid-cols-2 gap-4 mt-2 mb-2">
-                <div>
-                    <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Stamina Gasta (Atacante)</label>
-                    <input type="number" id="inp-dmg-st-attacker" class="input-dark w-full" placeholder="Ex: 5" value="0">
-                </div>
-                <div>
-                    <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Stamina Gasta (Esquiva/Alvo)</label>
-                    <input type="number" id="inp-dmg-st-target" class="input-dark w-full" placeholder="Ex: 3" value="0">
-                </div>
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Modificador Fixo (+Dano Opcional)</label>
-                <input type="number" id="inp-dmg-mod" class="input-dark w-full" placeholder="+0" value="0">
-            </div>
-            <div class="pt-4 flex justify-end gap-2">
-                <button type="button" class="btn-dark py-2 px-4 rounded" onclick="document.getElementById('modal-apply-damage').close()">Cancelar</button>
-                <button type="button" class="btn-gold py-2 px-4 rounded font-bold" id="btn-dmg-confirm">Rolar & Aplicar (v9)</button>
-            </div>
-        </div>
-    </dialog>
+    <script src="app.js?v=38" defer></script>
 
     <script src="js/item_manager.js"></script>
     <script src="js/status_effects.js"></script>
