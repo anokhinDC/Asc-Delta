@@ -149,6 +149,8 @@
     if (!item.ownerId) item.ownerId = state.user.uid;
     if (!item.ownerName) item.ownerName = (state.user.email || '').split('@')[0];
     const clean = JSON.parse(JSON.stringify(item));
+    // Atualiza já a cópia local, para a tela não voltar ao valor antigo enquanto o Firestore confirma.
+    if (i > -1) arr[i] = clean; else arr.push(clean);
     return state.db.collection(COLECOES[col]).doc(item.id).set(clean).then(() => item).catch((e) => {
       console.error(e);
       LD.ui && LD.ui.toast('Erro ao salvar: ' + e.message, 'erro');
