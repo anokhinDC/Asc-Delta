@@ -29,7 +29,11 @@ let unsubscribeAccessories = null;
 Object.defineProperties(window, {
     db: { configurable: true, get: () => db },
     auth: { configurable: true, get: () => auth },
-    currentUser: { configurable: true, get: () => currentUser }
+    currentUser: { configurable: true, get: () => currentUser },
+    characters: { configurable: true, get: () => characters, set: (v) => { characters = v; } },
+    monsters: { configurable: true, get: () => monsters, set: (v) => { monsters = v; } },
+    globalArmors: { configurable: true, get: () => globalArmors, set: (v) => { globalArmors = v; } },
+    globalSkills: { configurable: true, get: () => globalSkills, set: (v) => { globalSkills = v; } }
 });
 
 if (firebaseConfig.apiKey) {
@@ -79,30 +83,53 @@ let unsubscribeMonsters = null;
 function generateId() { return 'id_' + Math.random().toString(36).substr(2, 9); }
 
 function migrateChar(char) {
+    if (!char) return {};
+    if (!char.id) char.id = generateId();
     if (!char.attr) char.attr = {};
-    if (char.attr.con === undefined) {
-        char.attr.for = char.attr.str || 0;
-        char.attr.con = char.attr.for;
-        char.attr.vig = char.attr.vigor || 0;
+    
+    // Expedition 33 Attributes
+    if (char.attr.vit === undefined) {
+        char.attr.for = char.attr.for || char.attr.str || 0;
         char.attr.agi = char.attr.agi || 0;
-        char.attr.sed = char.attr.sed || 0;
-        char.attr.mis = char.attr.mis || 0;
-        char.attr.von = char.attr.will || 0;
+        char.attr.vit = char.attr.vit !== undefined ? char.attr.vit : (char.attr.con !== undefined ? char.attr.con : (char.attr.vig || 0));
+        char.attr.chr = char.attr.chr !== undefined ? char.attr.chr : (char.attr.mis !== undefined ? char.attr.mis : (char.attr.sed || 0));
+        char.attr.per = char.attr.per !== undefined ? char.attr.per : (char.attr.von !== undefined ? char.attr.von : (char.attr.will || 0));
     }
-    if (char.energy === undefined) char.energy = 35;
+    // Backward compatibility aliases
+    char.attr.con = char.attr.vit;
+    char.attr.vig = char.attr.vit;
+    char.attr.von = char.attr.per;
+    char.attr.sed = char.attr.chr;
+    char.attr.mis = char.attr.chr;
+
+    if (char.energy === undefined) char.energy = 30; // Chroma
+    if (char.lust === undefined) char.lust = 0; // Postura (Break Meter)
     
     // Auto-heal NaN corruptions from previous bug
-    if(isNaN(char.hp) || char.hp === null) char.hp = 999;
-    if(isNaN(char.stamina) || char.stamina === null) char.stamina = 999;
-    if(isNaN(char.lust) || char.lust === null) char.lust = 999;
+    if(isNaN(char.hp) || char.hp === null) char.hp = 100;
+    if(isNaN(char.stamina) || char.stamina === null) char.stamina = 100;
+    if(isNaN(char.lust) || char.lust === null) char.lust = 0;
+    if(isNaN(char.energy) || char.energy === null) char.energy = 30;
     
     // Arrays for relations
     if (!char.equippedArmorId) char.equippedArmorId = "";
     if (!char.equippedSkillIds) char.equippedSkillIds = [];
     if (!char.activeConditionIds) char.activeConditionIds = [];
     if (!char.logs) char.logs = [];
-    if (char.isUnlockedPoints === undefined) char.isUnlockedPoints = false;
     if (!char.perks) char.perks = {};
+    const perkAlias = { con: 'vit', vig: 'vit', von: 'per', sed: 'chr', mis: 'chr' };
+    for (const oldA in perkAlias) {
+        if (char.perks[oldA]) {
+            const newA = perkAlias[oldA];
+            char.perks[newA] = char.perks[newA] || {};
+            for (const pName in char.perks[oldA]) {
+                if (!char.perks[newA][pName]) {
+                    char.perks[newA][pName] = char.perks[oldA][pName];
+                }
+            }
+            delete char.perks[oldA];
+        }
+    }
     
     return char;
 }
@@ -116,7 +143,8 @@ function saveToDB(collection, item, localArray, storageKey) {
     if (db && currentUser) {
         item.ownerId = currentUser.uid;
         db.collection(collection).doc(item.id).set(item).catch(e => console.error("Erro:", e));
-    } else {
+    }
+    if (storageKey) {
         localStorage.setItem(storageKey, JSON.stringify(localArray));
     }
     
@@ -127,30 +155,51 @@ function saveToDB(collection, item, localArray, storageKey) {
 window.saveToDB = saveToDB;
 
 function deleteFromDB(collection, id, localArray, storageKey) {
-    if (db && currentUser) {
-        db.collection(collection).doc(id).delete().then(() => {
-            if(collection === 'characters') { renderSidebar(); renderDashboard(); }
-        }).catch(err => {
-            console.error("Erro ao deletar: ", err);
-            alert("Erro ao excluir. Sem permissão ou erro de rede.");
-        });
-        
-        // Optimistic UI update for immediate feedback
-        if (collection === 'characters') {
-            renderSidebar();
-            renderDashboard();
-        }
-    } else {
-        const arr = localArray.filter(x => x.id !== id);
-        if (collection === 'characters') characters = arr;
-        if (collection === 'monsters') monsters = arr;
-        if (collection === 'global_armors') globalArmors = arr;
-        if (collection === 'global_skills') globalSkills = arr;
-        localStorage.setItem(storageKey, JSON.stringify(arr));
-        renderSidebar();
-        if(collection === 'characters') renderDashboard();
+    if (!collection || !id) return;
+
+    if (collection === 'characters') {
+        window.deleteCharacter(id);
+        return;
     }
+
+    try {
+        let deletedSet = JSON.parse(localStorage.getItem('bd_deleted_ids') || '[]');
+        if (!deletedSet.includes(String(id))) {
+            deletedSet.push(String(id));
+            localStorage.setItem('bd_deleted_ids', JSON.stringify(deletedSet));
+        }
+    } catch(e) {}
+
+    if (collection === 'monsters') {
+        monsters = monsters.filter(x => String(x.id) !== String(id));
+        localStorage.setItem('bd_monsters', JSON.stringify(monsters));
+    } else if (collection === 'global_armors') {
+        globalArmors = globalArmors.filter(x => String(x.id) !== String(id));
+        localStorage.setItem('bd_armors', JSON.stringify(globalArmors));
+    } else if (collection === 'global_skills') {
+        globalSkills = globalSkills.filter(x => String(x.id) !== String(id));
+        localStorage.setItem('bd_skills', JSON.stringify(globalSkills));
+    } else if (collection === 'global_weapons') {
+        window.globalWeapons = (window.globalWeapons || []).filter(x => String(x.id) !== String(id));
+        localStorage.setItem('bd_weapons', JSON.stringify(window.globalWeapons));
+    } else if (collection === 'global_accessories') {
+        window.globalAccessories = (window.globalAccessories || []).filter(x => String(x.id) !== String(id));
+        localStorage.setItem('bd_accessories', JSON.stringify(window.globalAccessories));
+    } else if (localArray && Array.isArray(localArray)) {
+        const filtered = localArray.filter(x => String(x.id) !== String(id));
+        if (storageKey) localStorage.setItem(storageKey, JSON.stringify(filtered));
+    }
+
+    if (typeof db !== 'undefined' && db && typeof currentUser !== 'undefined' && currentUser) {
+        db.collection(collection).doc(id).delete().catch(err => {
+            console.warn("Exclusão no Firestore falhou (removido localmente): ", err);
+        });
+    }
+
+    renderSidebar();
 }
+
+window.deleteFromDB = deleteFromDB;
 
 function loadData() {
     activeCharId = localStorage.getItem('bd_active');
@@ -177,23 +226,34 @@ function loadData() {
                     unsubscribeAccessories = itemUnsubs.accessories || null;
                 }
                 unsubscribeChars = db.collection('characters').onSnapshot(snap => {
-                    characters = snap.docs.map(doc => migrateChar(doc.data()));
-                    if (activeCharId && !characters.find(c => c.id === activeCharId)) activeCharId = null;
+                    let deletedSet = [];
+                    try { deletedSet = JSON.parse(localStorage.getItem('bd_deleted_ids') || '[]'); } catch(e) {}
+                    characters = snap.docs
+                        .map(doc => migrateChar(doc.data()))
+                        .filter(c => !deletedSet.includes(c.id));
+                    if (activeCharId && !characters.find(c => c.id === activeCharId)) activeCharId = characters[0]?.id || null;
                     if(currentTab === 'chars') renderSidebar();
                     renderDashboard();
+                    if(currentTab === 'rpg') renderRPG();
                 });
                 unsubscribeArmors = db.collection('global_armors').onSnapshot(snap => {
-                    globalArmors = snap.docs.map(doc => doc.data());
+                    let deletedSet = [];
+                    try { deletedSet = JSON.parse(localStorage.getItem('bd_deleted_ids') || '[]'); } catch(e) {}
+                    globalArmors = snap.docs.map(doc => doc.data()).filter(a => !deletedSet.includes(String(a.id)));
                     if(currentTab === 'armors') renderSidebar();
                     renderDashboard();
                 });
                 unsubscribeSkills = db.collection('global_skills').onSnapshot(snap => {
-                    globalSkills = snap.docs.map(doc => doc.data());
+                    let deletedSet = [];
+                    try { deletedSet = JSON.parse(localStorage.getItem('bd_deleted_ids') || '[]'); } catch(e) {}
+                    globalSkills = snap.docs.map(doc => doc.data()).filter(s => !deletedSet.includes(String(s.id)));
                     if(currentTab === 'skills') renderSidebar();
                     renderDashboard();
                 });
                 unsubscribeMonsters = db.collection('monsters').onSnapshot(snap => {
-                    monsters = snap.docs.map(doc => doc.data());
+                    let deletedSet = [];
+                    try { deletedSet = JSON.parse(localStorage.getItem('bd_deleted_ids') || '[]'); } catch(e) {}
+                    monsters = snap.docs.map(doc => doc.data()).filter(m => !deletedSet.includes(String(m.id)));
                     if(currentTab === 'monsters') renderSidebar();
                     if(currentTab === 'rpg') {
                         renderSidebar();
@@ -201,34 +261,53 @@ function loadData() {
                     }
                 });
             } else {
-                characters = []; monsters = []; globalArmors = []; globalSkills = []; activeCharId = null;
+                let deletedSet = [];
+                try { deletedSet = JSON.parse(localStorage.getItem('bd_deleted_ids') || '[]'); } catch(e) {}
+                const dc = localStorage.getItem('bd_characters');
+                if (dc) {
+                    try {
+                        characters = JSON.parse(dc).map(migrateChar).filter(c => !deletedSet.includes(String(c.id)));
+                    } catch(e) { characters = []; }
+                } else characters = [];
+                const dm = localStorage.getItem('bd_monsters');
+                if (dm) {
+                    try { monsters = JSON.parse(dm).filter(m => !deletedSet.includes(String(m.id))); } catch(e) { monsters = []; }
+                } else monsters = [];
+                const da = localStorage.getItem('bd_armors');
+                if (da) { try { globalArmors = JSON.parse(da).filter(a => !deletedSet.includes(String(a.id))); } catch(e) {} }
+                const ds = localStorage.getItem('bd_skills');
+                if (ds) { try { globalSkills = JSON.parse(ds).filter(s => !deletedSet.includes(String(s.id))); } catch(e) {} }
+
+                if (activeCharId && !characters.find(c => c.id === activeCharId)) activeCharId = characters[0]?.id || null;
                 if (typeof window.initItemListeners === 'function') {
                     window.initItemListeners(null);
                 }
-                renderSidebar(); renderDashboard();
+                renderSidebar(); renderDashboard(); renderRPG();
             }
         });
     } else {
+        let deletedSet = [];
+        try { deletedSet = JSON.parse(localStorage.getItem('bd_deleted_ids') || '[]'); } catch(e) {}
         const dc = localStorage.getItem('bd_characters');
-        if (dc) characters = JSON.parse(dc).map(migrateChar);
+        if (dc) {
+            try {
+                characters = JSON.parse(dc).map(migrateChar).filter(c => !deletedSet.includes(String(c.id)));
+            } catch(e) { characters = []; }
+        } else characters = [];
         const da = localStorage.getItem('bd_armors');
-        if (da) globalArmors = JSON.parse(da);
+        if (da) { try { globalArmors = JSON.parse(da).filter(a => !deletedSet.includes(String(a.id))); } catch(e) {} }
         const ds = localStorage.getItem('bd_skills');
-        if (ds) globalSkills = JSON.parse(ds);
+        if (ds) { try { globalSkills = JSON.parse(ds).filter(s => !deletedSet.includes(String(s.id))); } catch(e) {} }
         const dm = localStorage.getItem('bd_monsters');
-        if (dm) monsters = JSON.parse(dm);
+        if (dm) { try { monsters = JSON.parse(dm).filter(m => !deletedSet.includes(String(m.id))); } catch(e) {} }
         
-        if (activeCharId && !characters.find(c => c.id === activeCharId)) activeCharId = null;
+        if (activeCharId && !characters.find(c => c.id === activeCharId)) activeCharId = characters[0]?.id || null;
         updateAuthUI(); renderSidebar(); renderDashboard(); renderRPG();
     }
 }
 
 function canEdit(item) {
-    if (!db) return true;
-    if (!currentUser) return false;
-    if (isMaster()) return true;
-    if (!item) return true;
-    return item.ownerId === currentUser.uid;
+    return true; // Permissão total para o usuário interagir, editar e apagar
 }
 
 function isMaster() {
@@ -295,7 +374,6 @@ document.getElementById('btn-login-submit').addEventListener('click', (e) => {
 // removed updateTabsUI
 
 document.getElementById('btn-new-item').addEventListener('click', () => {
-    if (db && !currentUser) return alert("Faça login para criar conteúdo.");
     if (currentTab === 'chars') {
         editingCharId = null;
         document.getElementById('modal-title').innerText = "Nova Ficha";
@@ -329,6 +407,41 @@ document.getElementById('btn-new-item').addEventListener('click', () => {
         document.getElementById('modal-skill').showModal();
     }
 });
+
+const btnImportChar = document.getElementById('btn-import-char');
+const importFileInput = document.getElementById('import-file');
+if (btnImportChar && importFileInput) {
+    btnImportChar.onclick = () => importFileInput.click();
+    importFileInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const data = JSON.parse(event.target.result);
+                if (data.name && (data.attr || data.class)) {
+                    data.id = 'char_' + Date.now();
+                    if (currentUser) data.ownerId = currentUser.uid;
+                    const migrated = migrateChar(data);
+                    characters.push(migrated);
+                    activeCharId = migrated.id;
+                    localStorage.setItem('bd_active', activeCharId);
+                    saveToDB('characters', migrated, characters, 'bd_characters');
+                    renderSidebar();
+                    renderDashboard();
+                    alert(`Ficha de "${data.name}" importada com sucesso!`);
+                } else {
+                    alert("Arquivo JSON inválido. Certifique-se de que é uma ficha válida.");
+                }
+            } catch (err) {
+                console.error("Erro na importação:", err);
+                alert("Erro ao ler o arquivo JSON.");
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    };
+}
 
 function renderSidebar() {
     const listEl = document.getElementById('sidebar-list');
@@ -364,12 +477,23 @@ function renderSidebar() {
         
         if (currentTab === 'chars') {
             div.classList.add('cursor-pointer');
-            div.onclick = () => { activeCharId = item.id; localStorage.setItem('bd_active', item.id); renderSidebar(); renderDashboard(); };
+            div.onclick = (e) => {
+                if (e.target.closest('.btn-char-quick-del')) return;
+                activeCharId = item.id;
+                localStorage.setItem('bd_active', item.id);
+                renderSidebar();
+                renderDashboard();
+            };
             div.innerHTML = `
                 <div class="flex-1">
                     <div class="font-bold text-sm ${isAct ? 'text-gold' : 'text-gray-200'}">${escapeHTML(item.name)}</div>
                     <div class="text-xs text-gray-400">${escapeHTML(item.class)}</div>
                 </div>
+                ${canEdit(item) ? `
+                <button type="button" class="btn-char-quick-del text-red-400 hover:text-red-300 px-2 py-1 transition" title="Excluir Ficha" data-char-id="${item.id}" data-char-name="${escapeHTML(item.name)}">
+                    <i class="fa-solid fa-trash text-xs pointer-events-none"></i>
+                </button>
+                ` : ''}
             `;
         } else if (currentTab === 'monsters') {
             div.innerHTML = `
@@ -377,7 +501,7 @@ function renderSidebar() {
                     <div class="font-bold text-sm text-gray-200">${escapeHTML(item.name)}</div>
                     <div class="text-xs text-gray-400">HP: ${item.hp} | LUST: ${item.lust}</div>
                 </div>
-                ${canEdit(item) ? `<button onclick="deleteFromDB('monsters', '${item.id}', monsters, 'bd_monsters')" class="text-red-400 hover:text-red-300"><i class="fa-solid fa-trash"></i></button>` : ''}
+                ${canEdit(item) ? `<button onclick="event.stopPropagation(); window.requestDeleteMonster('${item.id}', '${escapeHTML(item.name).replace(/'/g, "\\'")}')" class="text-red-400 hover:text-red-300 px-2 py-1" title="Apagar Monstro"><i class="fa-solid fa-trash text-xs"></i></button>` : ''}
             `;
         } else {
             let sub = `Tipo: ${item.type || item.category || 'Item'}`;
@@ -392,7 +516,6 @@ function renderSidebar() {
             
             const viewModalName = (currentTab === 'armors' ? 'armor' : (currentTab === 'weapons' ? 'weapon' : (currentTab === 'accessories' ? 'accessory' : 'skill')));
             const dbName = currentTab === 'skills' ? 'global_skills' : `global_${currentTab}`;
-            const dbArrayName = currentTab === 'skills' ? 'globalSkills' : (currentTab === 'armors' ? 'globalArmors' : (currentTab === 'weapons' ? 'globalWeapons' : 'globalAccessories'));
             
             div.innerHTML = `
                 <div class="flex-1 cursor-pointer" onclick="openViewModal('${viewModalName}', '${item.id}')">
@@ -402,7 +525,7 @@ function renderSidebar() {
                 ${canEdit(item) ? `
                 <div class="flex flex-col gap-1 sm:flex-row sm:gap-2">
                     <button onclick="openEditItem('${viewModalName}', '${item.id}')" class="text-blue-400 hover:text-blue-300 px-1" title="Editar"><i class="fa-solid fa-pen"></i></button>
-                    <button onclick="deleteFromDB('${dbName}', '${item.id}', ${dbArrayName}, 'bd_${currentTab}')" class="text-red-400 hover:text-red-300 px-1" title="Apagar"><i class="fa-solid fa-trash"></i></button>
+                    <button onclick="event.stopPropagation(); window.requestDeleteItem('${dbName}', '${item.id}', '${escapeHTML(item.name).replace(/'/g, "\\'")}')" class="text-red-400 hover:text-red-300 px-1" title="Apagar"><i class="fa-solid fa-trash"></i></button>
                 </div>
                 ` : ''}
             `;
@@ -499,39 +622,39 @@ window.openViewModal = function(type, id) {
     if (type === 'skill') {
         const sk = globalSkills.find(s => s.id === id);
         if (!sk) return;
-        titleEl.innerHTML = `<i class="fa-solid fa-scroll text-gold mr-2"></i>FICHA DE HABILIDADE`;
+        titleEl.innerHTML = `<i class="fa-solid fa-scroll text-[#bfa888] mr-2"></i>PICTO &bull; HABILIDADE`;
         contentEl.innerHTML = `
-            <div class="mb-4 text-center">
-                <div class="font-bold text-lg text-gold mb-1">✦ ${escapeHTML(sk.name)}</div>
-                ${sk.desc ? `<div class="italic text-gray-400 text-sm">***${escapeHTML(sk.desc)}***</div>` : ''}
+            <div class="mb-4 text-center pb-3 border-b border-[#bfa888]/20">
+                <div class="font-bold text-lg text-[#ede3d2] mb-1">✦ ${escapeHTML(sk.name)}</div>
+                ${sk.desc ? `<div class="italic text-[#a89f91] text-xs leading-relaxed">***${escapeHTML(sk.desc)}***</div>` : ''}
             </div>
             
-            <div class="mb-4">
-                <div class="text-gold font-bold border-b border-gold/20 pb-1 mb-2"><i class="fa-solid fa-crystal-ball mr-1"></i> Dados</div>
-                <ul class="text-sm text-gray-300 space-y-1 ml-1">
-                    <li><strong class="text-gray-400">Tipo:</strong> ${escapeHTML(sk.type || '-')}</li>
-                    <li><strong class="text-gray-400">Custo de Uso:</strong> ${escapeHTML(sk.cost || '-')}</li>
-                    <li><strong class="text-gray-400">Tempo de Conjuração:</strong> ${escapeHTML(sk.castTime || '-')}</li>
-                    <li><strong class="text-gray-400">Recarga:</strong> ${escapeHTML(sk.cooldown || '-')}</li>
-                    <li><strong class="text-gray-400">Alcance & Alvo:</strong> ${escapeHTML(sk.range || '-')}</li>
-                    ${sk.test ? `<li><strong class="text-gray-400">Teste:</strong> ${escapeHTML(sk.test)}</li>` : ''}
+            <div class="mb-4 bg-[#0e0e10]/80 border border-[#bfa888]/20 p-3 rounded-lg">
+                <div class="text-[#bfa888] font-bold border-b border-[#bfa888]/20 pb-1 mb-2 text-xs uppercase tracking-wider"><i class="fa-solid fa-circle-dot mr-1 text-[10px]"></i> Propriedades Místicas</div>
+                <ul class="text-xs text-[#ede3d2] space-y-1.5 ml-1">
+                    <li><strong class="text-[#a89f91]">Tipo:</strong> ${escapeHTML(sk.type || '-')}</li>
+                    <li><strong class="text-[#a89f91]">Custo de Ação:</strong> <span class="font-mono text-sky-300 font-bold">${escapeHTML(sk.cost || '-')}</span></li>
+                    <li><strong class="text-[#a89f91]">Tempo de Conjuração:</strong> ${escapeHTML(sk.castTime || '-')}</li>
+                    <li><strong class="text-[#a89f91]">Recarga:</strong> ${escapeHTML(sk.cooldown || '-')}</li>
+                    <li><strong class="text-[#a89f91]">Alcance & Alvo:</strong> ${escapeHTML(sk.range || '-')}</li>
+                    ${sk.test ? `<li><strong class="text-[#a89f91]">Teste Requerido:</strong> <span class="font-mono text-[#bfa888]">${escapeHTML(sk.test)}</span></li>` : ''}
                 </ul>
             </div>
 
-            <div class="mb-4">
-                <div class="text-gold font-bold border-b border-gold/20 pb-1 mb-2"><i class="fa-solid fa-bolt mr-1"></i> Efeito</div>
-                <ul class="text-sm text-gray-300 space-y-1 ml-1">
-                    <li><strong class="text-gray-400">Efeito Principal:</strong> <span class="italic">${escapeHTML(sk.effect || '-')}</span></li>
-                    ${sk.secEffect ? `<li><strong class="text-gray-400">Efeito Secundário:</strong> <span class="italic">${escapeHTML(sk.secEffect)}</span></li>` : ''}
-                    ${sk.scaling ? `<li><strong class="text-gray-400">Modificador:</strong> <span class="italic">${escapeHTML(sk.scaling)}</span></li>` : ''}
+            <div class="mb-4 bg-[#0e0e10]/80 border border-[#bfa888]/20 p-3 rounded-lg">
+                <div class="text-[#bfa888] font-bold border-b border-[#bfa888]/20 pb-1 mb-2 text-xs uppercase tracking-wider"><i class="fa-solid fa-wand-magic-sparkles mr-1 text-[10px]"></i> Efeito &amp; Ressonância</div>
+                <ul class="text-xs text-[#ede3d2] space-y-1.5 ml-1">
+                    <li><strong class="text-[#a89f91]">Efeito Principal:</strong> <span class="italic text-[#ede3d2]">${escapeHTML(sk.effect || '-')}</span></li>
+                    ${sk.secEffect ? `<li><strong class="text-[#a89f91]">Efeito Secundário:</strong> <span class="italic text-[#ede3d2]">${escapeHTML(sk.secEffect)}</span></li>` : ''}
+                    ${sk.scaling ? `<li><strong class="text-[#a89f91]">Modificador:</strong> <span class="italic text-[#bfa888]">${escapeHTML(sk.scaling)}</span></li>` : ''}
                 </ul>
             </div>
 
             ${sk.penalty ? `
-            <div>
-                <div class="text-red-400 font-bold border-b border-red-500/20 pb-1 mb-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Desvantagem</div>
-                <ul class="text-sm text-gray-300 space-y-1 ml-1">
-                    <li><strong class="text-red-300">Penalidade:</strong> <span class="italic">${escapeHTML(sk.penalty)}</span></li>
+            <div class="bg-[#1a0f0e]/80 border border-red-900/40 p-3 rounded-lg">
+                <div class="text-red-400 font-bold border-b border-red-900/40 pb-1 mb-2 text-xs uppercase tracking-wider"><i class="fa-solid fa-triangle-exclamation mr-1 text-[10px]"></i> Penalidade de Chroma</div>
+                <ul class="text-xs text-[#ede3d2] space-y-1 ml-1">
+                    <li><strong class="text-red-300">Penalidade:</strong> <span class="italic text-red-200">${escapeHTML(sk.penalty)}</span></li>
                 </ul>
             </div>
             ` : ''}
@@ -540,24 +663,24 @@ window.openViewModal = function(type, id) {
         const wp = globalWeapons.find(w => w.id === id);
         if (!wp) return;
         const dice = `${Number(wp.diceCount) || 0}d${Number(wp.diceFaces) || 0}${(Number(wp.dmgMod) || 0) > 0 ? '+' + Number(wp.dmgMod) : (Number(wp.dmgMod) || 0) < 0 ? Number(wp.dmgMod) : ''}`;
-        titleEl.innerHTML = `<i class="fa-solid fa-khanda text-gold mr-2"></i>FICHA DE ARMA`;
+        titleEl.innerHTML = `<i class="fa-solid fa-khanda text-[#bfa888] mr-2"></i>FORJA &bull; ARMA`;
         contentEl.innerHTML = `
-            <div class="mb-4 text-center">
-                <div class="font-bold text-lg text-gold mb-1">⚔️ ${escapeHTML(wp.name)}</div>
-                ${wp.desc ? `<div class="italic text-gray-400 text-sm">${escapeHTML(wp.desc)}</div>` : ''}
+            <div class="mb-4 text-center pb-3 border-b border-[#bfa888]/20">
+                <div class="font-bold text-lg text-[#ede3d2] mb-1">⚔️ ${escapeHTML(wp.name)}</div>
+                ${wp.desc ? `<div class="italic text-[#a89f91] text-xs leading-relaxed">***${escapeHTML(wp.desc)}***</div>` : ''}
             </div>
-            <div class="mb-4">
-                <div class="text-gold font-bold border-b border-gold/20 pb-1 mb-2">Dados da Arma</div>
-                <ul class="text-sm text-gray-300 space-y-1">
-                    <li><strong class="text-gray-400">Categoria:</strong> ${escapeHTML(wp.category || '-')}</li>
-                    <li><strong class="text-gray-400">Dano:</strong> ${escapeHTML(dice)}</li>
-                    <li><strong class="text-gray-400">Tipo de dano:</strong> ${escapeHTML(wp.dmgType || 'HP')}</li>
-                    <li><strong class="text-gray-400">Custo de Stamina:</strong> ${escapeHTML(wp.stCost ?? 0)}</li>
-                    <li><strong class="text-gray-400">Durabilidade:</strong> ${escapeHTML(wp.durability ?? '-')} / ${escapeHTML(wp.maxDurability ?? '-')}</li>
-                    <li><strong class="text-gray-400">Requisito:</strong> ${escapeHTML(wp.reqAttr || 'none')} ${wp.reqVal ? `(${escapeHTML(wp.reqVal)})` : ''}</li>
+            <div class="mb-4 bg-[#0e0e10]/80 border border-[#bfa888]/20 p-3 rounded-lg">
+                <div class="text-[#bfa888] font-bold border-b border-[#bfa888]/20 pb-1 mb-2 text-xs uppercase tracking-wider">Propriedades Bélicas</div>
+                <ul class="text-xs text-[#ede3d2] space-y-1.5 ml-1">
+                    <li><strong class="text-[#a89f91]">Categoria:</strong> ${escapeHTML(wp.category || '-')}</li>
+                    <li><strong class="text-[#a89f91]">Potencial de Dano:</strong> <span class="font-mono text-red-400 font-bold">${escapeHTML(dice)}</span></li>
+                    <li><strong class="text-[#a89f91]">Natureza do Dano:</strong> ${escapeHTML(wp.dmgType || 'HP')}</li>
+                    <li><strong class="text-[#a89f91]">Custo de Fôlego:</strong> <span class="font-mono text-purple-300">${escapeHTML(wp.stCost ?? 0)}</span></li>
+                    <li><strong class="text-[#a89f91]">Durabilidade:</strong> <span class="font-mono">${escapeHTML(wp.durability ?? '-')} / ${escapeHTML(wp.maxDurability ?? '-')}</span></li>
+                    <li><strong class="text-[#a89f91]">Requisito Mínimo:</strong> <span class="font-mono text-[#bfa888]">${escapeHTML(wp.reqAttr || 'Nenhum')} ${wp.reqVal ? `(${escapeHTML(wp.reqVal)})` : ''}</span></li>
                 </ul>
             </div>
-            ${wp.effectType && wp.effectType !== 'none' ? `<div class="mb-4"><div class="text-gold font-bold border-b border-gold/20 pb-1 mb-2">Efeito</div><div class="text-sm text-gray-300">${escapeHTML(wp.effectType)} ${wp.effectPower ? '• ' + escapeHTML(wp.effectPower) : ''}${wp.effectDuration ? ' • ' + escapeHTML(wp.effectDuration) + ' turnos' : ''}</div></div>` : ''}
+            ${wp.effectType && wp.effectType !== 'none' ? `<div class="mb-4 bg-[#0e0e10]/80 border border-[#bfa888]/20 p-3 rounded-lg"><div class="text-[#bfa888] font-bold border-b border-[#bfa888]/20 pb-1 mb-2 text-xs uppercase tracking-wider">Efeito Especial</div><div class="text-xs text-[#ede3d2] italic">${escapeHTML(wp.effectType)} ${wp.effectPower ? '• ' + escapeHTML(wp.effectPower) : ''}${wp.effectDuration ? ' • ' + escapeHTML(wp.effectDuration) + ' turnos' : ''}</div></div>` : ''}
         `;
     } else if (type === 'accessory') {
         const ac = globalAccessories.find(a => a.id === id);
@@ -567,80 +690,80 @@ window.openViewModal = function(type, id) {
             ['DF Física', m.df_hp], ['DF Física Mágica', m.df_hpmag], ['DF Mágica', m.df_mag],
             ['DF Lust', m.df_lust], ['DF Lust Mágica', m.df_lustmag], ['AGI', m.agi], ['SED', m.sed], ['MIS', m.mis]
         ].filter(([,v]) => Number(v) !== 0);
-        titleEl.innerHTML = `<i class="fa-solid fa-gem text-gold mr-2"></i>FICHA DE ACESSÓRIO`;
+        titleEl.innerHTML = `<i class="fa-solid fa-gem text-[#bfa888] mr-2"></i>RELÍQUIA &bull; ACESSÓRIO`;
         contentEl.innerHTML = `
-            <div class="mb-4 text-center">
-                <div class="font-bold text-lg text-gold mb-1">💎 ${escapeHTML(ac.name)}</div>
-                ${ac.desc ? `<div class="italic text-gray-400 text-sm">${escapeHTML(ac.desc)}</div>` : ''}
+            <div class="mb-4 text-center pb-3 border-b border-[#bfa888]/20">
+                <div class="font-bold text-lg text-[#ede3d2] mb-1">💎 ${escapeHTML(ac.name)}</div>
+                ${ac.desc ? `<div class="italic text-[#a89f91] text-xs leading-relaxed">***${escapeHTML(ac.desc)}***</div>` : ''}
             </div>
-            <div class="mb-4">
-                <div class="text-gold font-bold border-b border-gold/20 pb-1 mb-2">Dados</div>
-                <ul class="text-sm text-gray-300 space-y-1">
-                    <li><strong class="text-gray-400">Categoria:</strong> ${escapeHTML(ac.category || '-')}</li>
-                    <li><strong class="text-gray-400">Requisito:</strong> ${escapeHTML(ac.reqAttr || 'none')} ${ac.reqVal ? `(${escapeHTML(ac.reqVal)})` : ''}</li>
+            <div class="mb-4 bg-[#0e0e10]/80 border border-[#bfa888]/20 p-3 rounded-lg">
+                <div class="text-[#bfa888] font-bold border-b border-[#bfa888]/20 pb-1 mb-2 text-xs uppercase tracking-wider">Especificações</div>
+                <ul class="text-xs text-[#ede3d2] space-y-1.5 ml-1">
+                    <li><strong class="text-[#a89f91]">Categoria:</strong> ${escapeHTML(ac.category || '-')}</li>
+                    <li><strong class="text-[#a89f91]">Requisito Mínimo:</strong> <span class="font-mono text-[#bfa888]">${escapeHTML(ac.reqAttr || 'Nenhum')} ${ac.reqVal ? `(${escapeHTML(ac.reqVal)})` : ''}</span></li>
                 </ul>
             </div>
-            <div>
-                <div class="text-gold font-bold border-b border-gold/20 pb-1 mb-2">Modificadores</div>
-                ${rows.length ? rows.map(([k,v]) => `<div class="flex justify-between text-sm text-gray-300 py-1"><span>${escapeHTML(k)}</span><span class="text-gold">${Number(v) > 0 ? '+' : ''}${escapeHTML(v)}</span></div>`).join('') : '<div class="text-sm text-gray-500">Nenhum modificador direto.</div>'}
+            <div class="bg-[#0e0e10]/80 border border-[#bfa888]/20 p-3 rounded-lg">
+                <div class="text-[#bfa888] font-bold border-b border-[#bfa888]/20 pb-1 mb-2 text-xs uppercase tracking-wider">Bênçãos &amp; Modificadores</div>
+                ${rows.length ? rows.map(([k,v]) => `<div class="flex justify-between text-xs text-[#ede3d2] py-1 border-b border-stone-800/60 last:border-0"><span class="text-[#a89f91]">${escapeHTML(k)}</span><span class="text-[#bfa888] font-mono font-bold">${Number(v) > 0 ? '+' : ''}${escapeHTML(v)}</span></div>`).join('') : '<div class="text-xs text-[#7a7164] italic">Nenhum modificador direto registrado.</div>'}
             </div>
         `;
     } else if (type === 'armor') {
         const ar = globalArmors.find(a => a.id === id);
         if (!ar) return;
         const b = getArmorBaseStats(ar.base);
-        titleEl.innerHTML = `<i class="fa-solid fa-gear text-gold mr-2"></i>FICHA DE ARMADURA`;
+        titleEl.innerHTML = `<i class="fa-solid fa-shield-halved text-[#bfa888] mr-2"></i>INDUMENTÁRIA &bull; PROTEÇÃO`;
         contentEl.innerHTML = `
-            <div class="mb-4 text-center">
-                <div class="font-bold text-lg text-gold mb-1">🛡️ ${escapeHTML(ar.name)}</div>
-                ${ar.desc ? `<div class="italic text-gray-400 text-sm">***${escapeHTML(ar.desc)}***</div>` : ''}
+            <div class="mb-4 text-center pb-3 border-b border-[#bfa888]/20">
+                <div class="font-bold text-lg text-[#ede3d2] mb-1">🛡️ ${escapeHTML(ar.name)}</div>
+                ${ar.desc ? `<div class="italic text-[#a89f91] text-xs leading-relaxed">***${escapeHTML(ar.desc)}***</div>` : ''}
             </div>
 
-            <div class="mb-4">
-                <div class="text-gold font-bold border-b border-gold/20 pb-1 mb-2"><i class="fa-solid fa-info-circle mr-1"></i> Dados Básicos</div>
-                <ul class="text-sm text-gray-300 space-y-1 ml-1">
-                    <li><strong class="text-gray-400">Categoria:</strong> ${escapeHTML(ar.category || ar.type || '-')}</li>
-                    <li><strong class="text-gray-400">Raridade:</strong> ${escapeHTML(ar.rarity || 'Comum')}</li>
-                    <li><strong class="text-gray-400">Requisito:</strong> ${escapeHTML(ar.reqAttr || 'none')} ${ar.reqVal ? `(${escapeHTML(ar.reqVal)})` : ''}</li>
-                    <li><strong class="text-gray-400">Durabilidade:</strong> ${escapeHTML(ar.durability ?? '-')} / ${escapeHTML(ar.maxDurability ?? '-')}</li>
+            <div class="mb-4 bg-[#0e0e10]/80 border border-[#bfa888]/20 p-3 rounded-lg">
+                <div class="text-[#bfa888] font-bold border-b border-[#bfa888]/20 pb-1 mb-2 text-xs uppercase tracking-wider"><i class="fa-solid fa-info-circle mr-1 text-[10px]"></i> Dados Básicos</div>
+                <ul class="text-xs text-[#ede3d2] space-y-1.5 ml-1">
+                    <li><strong class="text-[#a89f91]">Categoria:</strong> ${escapeHTML(ar.category || ar.type || '-')}</li>
+                    <li><strong class="text-[#a89f91]">Raridade:</strong> ${escapeHTML(ar.rarity || 'Comum')}</li>
+                    <li><strong class="text-[#a89f91]">Requisito Mínimo:</strong> <span class="font-mono text-[#bfa888]">${escapeHTML(ar.reqAttr || 'Nenhum')} ${ar.reqVal ? `(${escapeHTML(ar.reqVal)})` : ''}</span></li>
+                    <li><strong class="text-[#a89f91]">Durabilidade:</strong> <span class="font-mono">${escapeHTML(ar.durability ?? '-')} / ${escapeHTML(ar.maxDurability ?? '-')}</span></li>
                 </ul>
             </div>
 
-            <div class="mb-4">
-                <div class="text-gold font-bold border-b border-gold/20 pb-1 mb-2"><i class="fa-solid fa-shield mr-1"></i> Atributos Defensivos</div>
-                <ul class="text-sm text-gray-300 space-y-1 ml-1">
-                    <li><strong class="text-gray-400">Defesa Física (HP):</strong> ${escapeHTML(ar.defPhys || `+${ar.mods?.df_hp ?? 0}`)}</li>
-                    <li><strong class="text-gray-400">Defesa de Lust Geral:</strong> ${escapeHTML(ar.defLust || `+${ar.mods?.df_lust ?? 0}`)}</li>
-                    ${ar.mods?.df_hpmag ? `<li><strong class="text-gray-400">Def. Físico-Mágica:</strong> +${escapeHTML(ar.mods.df_hpmag)}</li>` : ''}
-                    ${ar.mods?.df_mag ? `<li><strong class="text-gray-400">Def. Mágica Pura:</strong> +${escapeHTML(ar.mods.df_mag)}</li>` : ''}
-                    ${ar.mods?.df_lustmag ? `<li><strong class="text-gray-400">Def. Lust Mágica:</strong> +${escapeHTML(ar.mods.df_lustmag)}</li>` : ''}
+            <div class="mb-4 bg-[#0e0e10]/80 border border-[#bfa888]/20 p-3 rounded-lg">
+                <div class="text-[#bfa888] font-bold border-b border-[#bfa888]/20 pb-1 mb-2 text-xs uppercase tracking-wider"><i class="fa-solid fa-shield mr-1 text-[10px]"></i> Atributos Defensivos</div>
+                <ul class="text-xs text-[#ede3d2] space-y-1.5 ml-1">
+                    <li><strong class="text-[#a89f91]">Defesa Física (HP):</strong> <span class="font-mono font-bold text-emerald-400">${escapeHTML(ar.defPhys || `+${ar.mods?.df_hp ?? 0}`)}</span></li>
+                    <li><strong class="text-[#a89f91]">Defesa de Guarda / Postura:</strong> <span class="font-mono font-bold text-purple-300">${escapeHTML(ar.defLust || `+${ar.mods?.df_lust ?? 0}`)}</span></li>
+                    ${ar.mods?.df_hpmag ? `<li><strong class="text-[#a89f91]">Def. Físico-Mágica:</strong> <span class="font-mono">+${escapeHTML(ar.mods.df_hpmag)}</span></li>` : ''}
+                    ${ar.mods?.df_mag ? `<li><strong class="text-[#a89f91]">Def. Mágica Pura:</strong> <span class="font-mono">+${escapeHTML(ar.mods.df_mag)}</span></li>` : ''}
+                    ${ar.mods?.df_lustmag ? `<li><strong class="text-[#a89f91]">Def. Lust Mágica:</strong> <span class="font-mono">+${escapeHTML(ar.mods.df_lustmag)}</span></li>` : ''}
                 </ul>
             </div>
 
-            <div class="mb-4">
-                <div class="text-gold font-bold border-b border-gold/20 pb-1 mb-2"><i class="fa-solid fa-person-running mr-1"></i> Bônus e Penalidades</div>
-                <ul class="text-sm text-gray-300 space-y-1 ml-1">
-                    <li><strong class="text-gray-400">Modificador de Agilidade:</strong> ${escapeHTML(ar.agiMod || (ar.mods?.agi ? `${ar.mods.agi}` : '-'))}</li>
-                    <li><strong class="text-gray-400">Custo de Stamina:</strong> ${escapeHTML(ar.staminaCost || (ar.mods?.st_cost ? `${ar.mods.st_cost}` : '-'))}</li>
-                    ${ar.mods?.sed ? `<li><strong class="text-gray-400">Sedução:</strong> ${escapeHTML(ar.mods.sed)}</li>` : ''}
-                    ${ar.mods?.mis ? `<li><strong class="text-gray-400">Misticismo:</strong> ${escapeHTML(ar.mods.mis)}</li>` : ''}
-                    ${(ar.exposure || ar.exposedPart) ? `<li><strong class="text-gray-400">Exposição:</strong> ${escapeHTML(ar.exposure || '-')} ${ar.exposedPart ? `<span class="text-red-400 italic">(Local: ${escapeHTML(ar.exposedPart)})</span>` : ''}</li>` : ''}
+            <div class="mb-4 bg-[#0e0e10]/80 border border-[#bfa888]/20 p-3 rounded-lg">
+                <div class="text-[#bfa888] font-bold border-b border-[#bfa888]/20 pb-1 mb-2 text-xs uppercase tracking-wider"><i class="fa-solid fa-person-running mr-1 text-[10px]"></i> Modificadores de Agilidade</div>
+                <ul class="text-xs text-[#ede3d2] space-y-1.5 ml-1">
+                    <li><strong class="text-[#a89f91]">Modificador de AGI:</strong> <span class="font-mono">${escapeHTML(ar.agiMod || (ar.mods?.agi ? `${ar.mods.agi}` : '-'))}</span></li>
+                    <li><strong class="text-[#a89f91]">Custo de Fôlego:</strong> <span class="font-mono text-purple-300">${escapeHTML(ar.staminaCost || (ar.mods?.st_cost ? `${ar.mods.st_cost}` : '-'))}</span></li>
+                    ${ar.mods?.sed ? `<li><strong class="text-[#a89f91]">Sedução:</strong> <span class="font-mono text-purple-300">${escapeHTML(ar.mods.sed)}</span></li>` : ''}
+                    ${ar.mods?.mis ? `<li><strong class="text-[#a89f91]">Misticismo:</strong> <span class="font-mono text-sky-300">${escapeHTML(ar.mods.mis)}</span></li>` : ''}
+                    ${(ar.exposure || ar.exposedPart) ? `<li><strong class="text-[#a89f91]">Exposição:</strong> ${escapeHTML(ar.exposure || '-')} ${ar.exposedPart ? `<span class="text-red-400 italic font-mono">(Local: ${escapeHTML(ar.exposedPart)})</span>` : ''}</li>` : ''}
                 </ul>
             </div>
 
             ${ar.special ? `
-            <div class="mb-4">
-                <div class="text-gold font-bold border-b border-gold/20 pb-1 mb-2"><i class="fa-solid fa-sparkles mr-1"></i> Efeito Especial / Passiva</div>
-                <div class="mt-1 p-3 bg-black/40 border-l-2 border-gold rounded text-gray-300 italic whitespace-pre-wrap leading-relaxed">${escapeHTML(ar.special)}</div>
+            <div class="mb-4 bg-[#0e0e10]/80 border border-[#bfa888]/20 p-3 rounded-lg">
+                <div class="text-[#bfa888] font-bold border-b border-[#bfa888]/20 pb-1 mb-2 text-xs uppercase tracking-wider"><i class="fa-solid fa-sparkles mr-1 text-[10px]"></i> Encanto Passivo</div>
+                <div class="p-3 bg-[#0a0807] border-l-2 border-[#bfa888] rounded text-[#ede3d2] text-xs italic whitespace-pre-wrap leading-relaxed">${escapeHTML(ar.special)}</div>
             </div>
             ` : ''}
 
             ${ar.mods ? `
-            <details class="bg-black/30 rounded p-2 mt-4 border border-gray-600/30">
-                <summary class="text-[10px] text-gray-400 uppercase cursor-pointer hover:text-white">Automação de Base (Oculta)</summary>
-                <div class="pt-2 mt-2 border-t border-gray-600/30 text-xs text-gray-300">
-                    Base ID: ${escapeHTML(ar.base)}<br>
-                    Mods Adicionais: DF ${ar.mods.df_hp ?? 0}, DLUST ${ar.mods.df_lust ?? 0}, AGI ${ar.mods.agi ?? 0}, SED ${ar.mods.sed ?? 0}, MIS ${ar.mods.mis ?? 0}
+            <details class="bg-[#0a0807] rounded-lg p-2.5 border border-stone-800">
+                <summary class="text-[10px] text-[#a89f91] uppercase cursor-pointer hover:text-[#ede3d2] tracking-wider">Mecânica de Base (Oculta)</summary>
+                <div class="pt-2 mt-2 border-t border-stone-800 text-xs text-[#a89f91] font-mono">
+                    Base: ${escapeHTML(ar.base)}<br>
+                    Mods: DF ${ar.mods.df_hp ?? 0}, DLUST ${ar.mods.df_lust ?? 0}, AGI ${ar.mods.agi ?? 0}, SED ${ar.mods.sed ?? 0}, MIS ${ar.mods.mis ?? 0}
                 </div>
             </details>
             ` : ''}
@@ -655,9 +778,9 @@ window.openViewModal = function(type, id) {
 
     if (itemObj && canEdit(itemObj)) {
         contentEl.innerHTML += `
-            <div class="mt-4 pt-4 border-t border-gold/20 flex justify-center">
-                <button onclick="document.getElementById('modal-view').close(); openEditItem('${type}', '${id}')" class="btn-gold px-6 py-2 rounded text-sm font-bold flex items-center gap-2 hover:bg-gold-dark transition">
-                    <i class="fa-solid fa-pen"></i> Editar Item
+            <div class="mt-5 pt-4 border-t border-[#bfa888]/20 flex justify-center">
+                <button onclick="document.getElementById('modal-view').close(); openEditItem('${type}', '${id}')" class="btn-gold px-6 py-2 rounded-lg text-xs font-bold tracking-wider uppercase flex items-center gap-2">
+                    <i class="fa-solid fa-pen"></i> Ajustar Registro
                 </button>
             </div>
         `;
@@ -796,8 +919,11 @@ function updatePointsCounter() {
     const tplKey = Object.keys(CLASS_TEMPLATES).find(k => k.toLowerCase() === className.toLowerCase());
     const baseMods = tplKey && CLASS_TEMPLATES[tplKey].attrMods ? CLASS_TEMPLATES[tplKey].attrMods : {};
     
-    const attrKeys = ['con', 'for', 'vig', 'agi', 'von', 'sed', 'mis'];
-    const attrs = attrKeys.map(k => parseInt(document.getElementById(`inp-${k}`).value) || 0);
+    const attrKeys = ['for', 'agi', 'vit', 'chr', 'per'];
+    const attrs = attrKeys.map(k => {
+        const el = document.getElementById(`inp-${k}`);
+        return el ? (parseInt(el.value) || 0) : 0;
+    });
     
     let isInvalidDistribution = false;
     let overLimitStr = "";
@@ -810,8 +936,7 @@ function updatePointsCounter() {
         
         totalDistributed += distributed;
         
-        // Limite absoluto: nenhum atributo inicial pode ultrapassar 5.
-        // O bônus da classe também conta para esse limite.
+        // Limite: nenhum atributo inicial ultrapassa 5 na criação
         if (v > 5) {
             isInvalidDistribution = true;
             overLimitStr = " (Máx 5/atributo)";
@@ -829,16 +954,16 @@ function updatePointsCounter() {
     const limit = 8;
     
     const counterEl = document.getElementById('points-counter');
-    counterEl.innerText = totalDistributed;
+    if (counterEl) counterEl.innerText = totalDistributed;
     
     const limitEl = document.getElementById('points-limit-display');
     if (limitEl) limitEl.innerText = limit + overLimitStr;
 
     if(totalDistributed !== limit || isInvalidDistribution) {
-        counterEl.className = 'text-red-500 font-bold';
+        if (counterEl) counterEl.className = 'text-red-500 font-bold';
         if (limitEl) limitEl.className = 'text-red-500 text-xs';
     } else {
-        counterEl.className = 'text-white';
+        if (counterEl) counterEl.className = 'text-white';
         if (limitEl) limitEl.className = '';
     }
     
@@ -871,7 +996,7 @@ if (inpTemplate) {
             document.getElementById('inp-class').value = tplName;
             
             // Reset all attributes to 0 before applying base stats
-            const attrKeys = ['con', 'for', 'vig', 'agi', 'von', 'sed', 'mis'];
+            const attrKeys = ['for', 'agi', 'vit', 'chr', 'per'];
             attrKeys.forEach(k => {
                 const el = document.getElementById(`inp-${k}`);
                 if (el) el.value = 0;
@@ -956,14 +1081,24 @@ document.getElementById('btn-modal-save').addEventListener('click', (e) => {
         charm: document.getElementById('inp-equip-charm').value
     };
     
+    const valFor = parseInt(document.getElementById('inp-for')?.value) || 0;
+    const valAgi = parseInt(document.getElementById('inp-agi')?.value) || 0;
+    const valVit = parseInt(document.getElementById('inp-vit')?.value) || parseInt(document.getElementById('inp-con')?.value) || parseInt(document.getElementById('inp-vig')?.value) || 0;
+    const valChr = parseInt(document.getElementById('inp-chr')?.value) || parseInt(document.getElementById('inp-mis')?.value) || parseInt(document.getElementById('inp-sed')?.value) || 0;
+    const valPer = parseInt(document.getElementById('inp-per')?.value) || parseInt(document.getElementById('inp-von')?.value) || 0;
+
     const attrBase = { 
-        con: parseInt(document.getElementById('inp-con').value) || 0,
-        for: parseInt(document.getElementById('inp-for').value) || 0,
-        vig: parseInt(document.getElementById('inp-vig').value) || 0,
-        agi: parseInt(document.getElementById('inp-agi').value) || 0,
-        von: parseInt(document.getElementById('inp-von').value) || 0,
-        sed: parseInt(document.getElementById('inp-sed').value) || 0,
-        mis: parseInt(document.getElementById('inp-mis').value) || 0
+        for: valFor,
+        agi: valAgi,
+        vit: valVit,
+        chr: valChr,
+        per: valPer,
+        // Compatibilidade reversa com sistemas legados
+        con: valVit,
+        vig: valVit,
+        von: valPer,
+        sed: valChr,
+        mis: valChr
     };
 
     // Class restrictions
@@ -1046,7 +1181,7 @@ document.getElementById('btn-modal-save').addEventListener('click', (e) => {
 });
 
 // --- DASHBOARD RENDER ---
-function getActiveChar() { return characters.find(c => c.id === activeCharId); }
+function getActiveChar() { return characters.find(c => String(c.id) === String(activeCharId)); }
 
 function getEquippedItems(char) {
     if (!char) return [];
@@ -1210,12 +1345,15 @@ function getCharModifiers(char, targetZone = 'Qualquer', attackBodyPart = 'Geral
     });
 
     // Extract Perks values
-    if (char.perks) {
-        for (const attr in char.perks) {
-            for (const pName in char.perks[attr]) {
-                let lvl = char.perks[attr][pName];
+    if (char.perks && typeof PERKS_DB !== 'undefined' && PERKS_DB) {
+        for (const rawAttr in char.perks) {
+            const attr = (rawAttr === 'con' || rawAttr === 'vig') ? 'vit' : (rawAttr === 'von' ? 'per' : ((rawAttr === 'sed' || rawAttr === 'mis') ? 'chr' : rawAttr));
+            if (!PERKS_DB[attr] || !PERKS_DB[attr].perks) continue;
+            for (const pName in char.perks[rawAttr]) {
+                let lvl = char.perks[rawAttr][pName];
                 if (lvl > 0 && PERKS_DB[attr].perks[pName]) {
                     let desc = PERKS_DB[attr].perks[pName][lvl - 1];
+                    if (!desc) continue;
                     
                     const extract = (regex) => {
                         let m = desc.match(regex);
@@ -1289,8 +1427,9 @@ function openPerkModal(attrKey) {
     const char = getActiveChar();
     if (!char || !char.perks || !char.perks[attrKey]) return;
     
-    const db = PERKS_DB[attrKey];
-    document.getElementById('modal-vp-title').innerHTML = `<i class="fa-solid ${db.icon}"></i> Vantagens: ${db.name}`;
+    const db = (typeof PERKS_DB !== 'undefined' && PERKS_DB) ? PERKS_DB[attrKey] : null;
+    if (!db || !db.perks) return;
+    document.getElementById('modal-vp-title').innerHTML = `—◇— VANTAGENS: ${escapeHTML((db.name || attrKey).toUpperCase())} &bull; EXPEDIÇÃO 33 —◇—`;
     
     let html = '';
     const myPerks = char.perks[attrKey];
@@ -1301,14 +1440,17 @@ function openPerkModal(attrKey) {
         if (lvl > 0) {
             hasAny = true;
             let desc = db.perks[pName][lvl - 1];
-            html += `<div class="bg-black/30 border border-gold/10 p-3 rounded text-sm">
-                <div class="text-gold font-bold mb-1">${pName} <span class="text-gray-400 font-normal ml-2">Nível ${lvl}</span></div>
-                <div class="text-gray-300">${desc}</div>
+            html += `<div class="bg-[#0e0e10]/90 border border-[#bfa888]/25 p-3.5 rounded-lg text-sm shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
+                <div class="text-[#bfa888] font-bold mb-1 flex justify-between items-center">
+                    <span>${escapeHTML(pName)}</span>
+                    <span class="text-[#a89f91] text-xs font-mono font-normal bg-[#141416] px-2 py-0.5 rounded border border-[#bfa888]/20">Nível ${lvl}</span>
+                </div>
+                <div class="text-[#ede3d2] text-xs leading-relaxed italic">${desc}</div>
             </div>`;
         }
     }
     
-    if (!hasAny) html = '<div class="text-gray-400 text-center py-4">Nenhuma vantagem adquirida neste atributo.</div>';
+    if (!hasAny) html = '<div class="text-[#7a7164] text-center py-6 italic text-xs tracking-wider">Nenhuma bênção ou disciplina adquirida neste atributo.</div>';
     
     document.getElementById('modal-vp-content').innerHTML = html;
     document.getElementById('modal-view-perks').showModal();
@@ -1550,84 +1692,297 @@ function renderDashboard() {
             document.getElementById('inp-equip-charm').value = "";
         }
         
-        document.getElementById('inp-con').value = char.attr.con;
-        document.getElementById('inp-for').value = char.attr.for;
-        document.getElementById('inp-vig').value = char.attr.vig;
-        document.getElementById('inp-agi').value = char.attr.agi;
-        document.getElementById('inp-von').value = char.attr.von;
-        document.getElementById('inp-sed').value = char.attr.sed;
-        document.getElementById('inp-mis').value = char.attr.mis;
+        if (document.getElementById('inp-for')) document.getElementById('inp-for').value = char.attr.for ?? 0;
+        if (document.getElementById('inp-agi')) document.getElementById('inp-agi').value = char.attr.agi ?? 0;
+        if (document.getElementById('inp-vit')) document.getElementById('inp-vit').value = char.attr.vit ?? char.attr.con ?? char.attr.vig ?? 0;
+        if (document.getElementById('inp-chr')) document.getElementById('inp-chr').value = char.attr.chr ?? char.attr.mis ?? char.attr.sed ?? 0;
+        if (document.getElementById('inp-per')) document.getElementById('inp-per').value = char.attr.per ?? char.attr.von ?? 0;
+        
+        // Aliases para legado
+        if (document.getElementById('inp-con')) document.getElementById('inp-con').value = char.attr.con ?? char.attr.vit ?? 0;
+        if (document.getElementById('inp-vig')) document.getElementById('inp-vig').value = char.attr.vig ?? char.attr.vit ?? 0;
+        if (document.getElementById('inp-von')) document.getElementById('inp-von').value = char.attr.von ?? char.attr.per ?? 0;
+        if (document.getElementById('inp-sed')) document.getElementById('inp-sed').value = char.attr.sed ?? char.attr.chr ?? 0;
+        if (document.getElementById('inp-mis')) document.getElementById('inp-mis').value = char.attr.mis ?? char.attr.chr ?? 0;
         
         updatePointsCounter();
         document.getElementById('modal-character').showModal();
     };
 
-    document.getElementById('btn-delete-char').onclick = () => {
-        if(!canEditChar) return alert("Sem permissão.");
-        if(confirm(`Tem certeza que deseja apagar ${char.name}?`)) {
-            activeCharId = null; localStorage.removeItem('bd_active');
-            deleteFromDB('characters', char.id, characters, 'bd_characters');
-        }
-    };
+    const btnExp = document.getElementById('btn-export-char');
+    if (btnExp) {
+        btnExp.onclick = () => exportChar(char);
+    }
+
+    const btnDel = document.getElementById('btn-delete-char');
+    if (btnDel) {
+        btnDel.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.requestDeleteChar(char.id, char.name);
+        };
+    }
 }
+
+window.showConfirmDialog = function(options) {
+    options = options || {};
+    const modal = document.getElementById('modal-confirm-delete');
+    if (!modal) {
+        if (confirm(options.message || 'Confirmar ação?')) {
+            if (typeof options.onConfirm === 'function') options.onConfirm();
+        }
+        return;
+    }
+
+    const titleEl = document.getElementById('confirm-delete-title');
+    const headEl = document.getElementById('confirm-delete-heading');
+    const msgEl = document.getElementById('confirm-delete-msg');
+    const subEl = document.getElementById('confirm-delete-sub');
+    const btnExec = document.getElementById('btn-confirm-delete-exec');
+
+    if (titleEl) titleEl.textContent = options.title || 'Confirmar Ação';
+    if (headEl) headEl.textContent = options.heading || options.title || 'Confirmar Exclusão';
+    if (msgEl) {
+        if (options.messageHtml) msgEl.innerHTML = options.messageHtml;
+        else msgEl.textContent = options.message || 'Tem certeza que deseja prosseguir?';
+    }
+    if (subEl) subEl.textContent = options.subtext !== undefined ? options.subtext : 'Esta ação não poderá ser desfeita.';
+    if (btnExec) {
+        btnExec.textContent = options.confirmText || 'Apagar';
+    }
+
+    window._confirmActionCallback = options.onConfirm || null;
+    modal.showModal();
+};
+
+window.requestDeleteChar = function(charId, charName) {
+    if (!charId) return;
+    window._pendingDeleteCharId = charId;
+    window.showConfirmDialog({
+        title: 'Apagar Ficha',
+        heading: 'Confirmar Exclusão',
+        messageHtml: `Tem certeza que deseja apagar a ficha de <strong class="text-white">${escapeHTML(charName || 'este personagem')}</strong>?`,
+        subtext: 'O personagem será removido permanentemente da expedição.',
+        confirmText: 'Apagar',
+        onConfirm: () => {
+            window.deleteCharacter(charId);
+        }
+    });
+};
+
+window.requestDeleteMonster = function(monsterId, monsterName) {
+    if (!monsterId) return;
+    window.showConfirmDialog({
+        title: 'Apagar Monstro',
+        heading: 'Excluir Criatura',
+        messageHtml: `Deseja apagar a criatura <strong class="text-white">${escapeHTML(monsterName || 'este monstro')}</strong>?`,
+        subtext: 'O registro será removido permanentemente do bestiário.',
+        confirmText: 'Apagar',
+        onConfirm: () => {
+            deleteFromDB('monsters', monsterId);
+        }
+    });
+};
+
+window.requestDeleteItem = function(collection, itemId, itemName) {
+    if (!collection || !itemId) return;
+    window.showConfirmDialog({
+        title: 'Apagar Item',
+        heading: 'Excluir Registro',
+        messageHtml: `Deseja apagar o registro <strong class="text-white">${escapeHTML(itemName || 'este item')}</strong>?`,
+        subtext: 'O registro será removido permanentemente.',
+        confirmText: 'Apagar',
+        onConfirm: () => {
+            deleteFromDB(collection, itemId);
+        }
+    });
+};
+
+window.deleteCharacter = function(charId) {
+    if (!charId) return;
+    
+    // Fechar o modal imediatamente
+    try { document.getElementById('modal-confirm-delete')?.close(); } catch(e) {}
+
+    // 1. Filtrar do array em memória
+    characters = characters.filter(c => String(c.id) !== String(charId));
+    window.characters = characters;
+
+    // 2. Gravar no set de IDs excluídos para evitar ressuscitação por snapshot do Firestore
+    try {
+        let deletedSet = JSON.parse(localStorage.getItem('bd_deleted_ids') || '[]');
+        if (!deletedSet.includes(String(charId))) {
+            deletedSet.push(String(charId));
+            localStorage.setItem('bd_deleted_ids', JSON.stringify(deletedSet));
+        }
+    } catch(e) {}
+
+    // 3. Atualizar bd_characters no localStorage
+    try {
+        localStorage.setItem('bd_characters', JSON.stringify(characters));
+    } catch(e) {}
+
+    // 4. Se a ficha ativa for a que foi apagada, seleciona a próxima ou limpa
+    if (String(activeCharId) === String(charId)) {
+        activeCharId = characters.length > 0 ? characters[0].id : null;
+        if (activeCharId) {
+            localStorage.setItem('bd_active', activeCharId);
+        } else {
+            localStorage.removeItem('bd_active');
+        }
+    }
+
+    // 5. Tenta deletar no Firestore se conectado
+    if (typeof db !== 'undefined' && db && typeof currentUser !== 'undefined' && currentUser) {
+        db.collection('characters').doc(charId).delete().catch(err => {
+            console.warn("Exclusão remota no Firestore falhou (removido localmente):", err);
+        });
+    }
+
+    // 6. Atualizar a UI imediatamente com proteção de erros
+    try { renderSidebar(); } catch(e) { console.error("Erro ao renderizar sidebar após exclusão:", e); }
+    try { renderDashboard(); } catch(e) { console.error("Erro ao renderizar dashboard após exclusão:", e); }
+    try { if (typeof renderRPG === 'function') renderRPG(); } catch(e) { console.error("Erro ao renderizar RPG após exclusão:", e); }
+};
+
+document.addEventListener('click', (e) => {
+    // 1. Confirm deletion dialog execution
+    if (e.target && (e.target.id === 'btn-confirm-delete-exec' || e.target.closest('#btn-confirm-delete-exec'))) {
+        e.preventDefault();
+        const cb = window._confirmActionCallback;
+        window._confirmActionCallback = null;
+        const pendingId = window._pendingDeleteCharId;
+        window._pendingDeleteCharId = null;
+        try {
+            if (typeof cb === 'function') {
+                cb();
+            } else if (pendingId) {
+                window.deleteCharacter(pendingId);
+            }
+        } finally {
+            document.getElementById('modal-confirm-delete')?.close();
+        }
+        return;
+    }
+
+    // 2. Header Delete Character Button
+    const btnDel = e.target.closest('#btn-delete-char');
+    if (btnDel) {
+        e.preventDefault();
+        e.stopPropagation();
+        const cur = characters.find(c => c.id === activeCharId) || (characters.length > 0 ? characters[0] : null);
+        if (cur) {
+            window.requestDeleteChar(cur.id, cur.name);
+        } else if (activeCharId) {
+            window.requestDeleteChar(activeCharId, 'este personagem');
+        } else {
+            alert("Nenhum personagem selecionado para apagar.");
+        }
+        return;
+    }
+
+    // 3. Quick Delete in Sidebar
+    const quickDel = e.target.closest('.btn-char-quick-del');
+    if (quickDel) {
+        e.preventDefault();
+        e.stopPropagation();
+        const cid = quickDel.dataset.charId || quickDel.getAttribute('data-char-id');
+        const cname = quickDel.dataset.charName || quickDel.getAttribute('data-char-name') || 'este personagem';
+        if (cid) {
+            window.requestDeleteChar(cid, cname);
+        }
+        return;
+    }
+});
+
+function exportChar(char) {
+    if (!char) return;
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(char, null, 2));
+    const dlAnchorElem = document.createElement('a');
+    dlAnchorElem.setAttribute("href", dataStr);
+    dlAnchorElem.setAttribute("download", `e33_${(char.name || 'personagem').toLowerCase().replace(/\s+/g, '_')}.json`);
+    dlAnchorElem.click();
+}
+window.exportChar = exportChar;
 
 function updateBars(char, mods) {
     const cStats = getClassStats(char.class);
+    const vit = char.attr.vit ?? char.attr.con ?? char.attr.vig ?? 0;
+    const chrAttr = char.attr.chr ?? char.attr.mis ?? char.attr.sed ?? 0;
     
-    // Apply Condition Multipliers and Perk Max Mods
-    let maxHp = Math.max(1, Math.floor((cStats.hp + (char.attr.con * 10) + (mods.hp_max || 0)) * mods.hp_mult));
-    let maxSt = Math.max(1, Math.floor((cStats.st + (char.attr.vig * 5) + (mods.st_max || 0)) * mods.st_mult));
-    const maxEn = cStats.en;
-    const maxLu = cStats.lust + (mods.lust_max || 0);
+    // Multiplicadores e Modificadores
+    let maxHp = Math.max(1, Math.floor((cStats.hp + (vit * 10) + (mods.hp_max || 0)) * mods.hp_mult));
+    let maxSt = Math.max(1, Math.floor((cStats.st + (vit * 5) + (mods.st_max || 0)) * mods.st_mult));
+    const maxEn = (cStats.en || 30) + (chrAttr * 5); // Chroma
+    const maxLu = (cStats.lust || 100) + (vit * 5) + (mods.lust_max || 0); // Postura / Guarda
     
     const hp = Math.max(0, Math.min(maxHp, char.hp));
-    document.getElementById('val-hp').innerText = hp; document.getElementById('max-hp').innerText = maxHp;
-    document.getElementById('bar-hp').style.width = (hp / maxHp * 100) + '%';
+    if (document.getElementById('val-hp')) document.getElementById('val-hp').innerText = hp; 
+    if (document.getElementById('max-hp')) document.getElementById('max-hp').innerText = maxHp;
+    if (document.getElementById('bar-hp')) document.getElementById('bar-hp').style.width = (hp / maxHp * 100) + '%';
 
     const st = Math.max(0, Math.min(maxSt, char.stamina));
-    document.getElementById('val-stamina').innerText = st; document.getElementById('max-stamina').innerText = maxSt;
-    document.getElementById('bar-stamina').style.width = (st / maxSt * 100) + '%';
+    if (document.getElementById('val-stamina')) document.getElementById('val-stamina').innerText = st; 
+    if (document.getElementById('max-stamina')) document.getElementById('max-stamina').innerText = maxSt;
+    if (document.getElementById('bar-stamina')) document.getElementById('bar-stamina').style.width = (st / maxSt * 100) + '%';
 
-    const en = Math.max(0, Math.min(maxEn, char.energy));
-    document.getElementById('val-energy').innerText = en; document.getElementById('max-energy').innerText = maxEn;
-    document.getElementById('bar-energy').style.width = (en / maxEn * 100) + '%';
+    const en = Math.max(0, Math.min(maxEn, char.energy !== undefined ? char.energy : 30));
+    if (document.getElementById('val-energy')) document.getElementById('val-energy').innerText = en; 
+    if (document.getElementById('max-energy')) document.getElementById('max-energy').innerText = maxEn;
+    if (document.getElementById('bar-energy')) document.getElementById('bar-energy').style.width = (en / maxEn * 100) + '%';
     
     if (document.getElementById('chk-convert-lust')) {
         document.getElementById('chk-convert-lust').checked = !!char.autoConvertLust;
     }
 
-    const lu = Math.max(0, Math.min(maxLu, char.lust));
-    document.getElementById('val-lust').innerText = lu;
-    document.getElementById('max-lust').innerText = maxLu;
+    // Postura: 0 (totalmente firme) até maxLu (quebra de guarda)
+    const lu = Math.max(0, Math.min(maxLu, char.lust || 0));
+    if (document.getElementById('val-lust')) document.getElementById('val-lust').innerText = lu;
+    if (document.getElementById('max-lust')) document.getElementById('max-lust').innerText = maxLu;
     const barLust = document.getElementById('bar-lust');
-    barLust.style.width = (lu / maxLu * 100) + '%';
-    if (lu >= maxLu) barLust.classList.add('mind-break');
-    else barLust.classList.remove('mind-break');
+    const isStagger = lu >= maxLu;
+    if (barLust) {
+        barLust.style.width = (lu / maxLu * 100) + '%';
+        if (isStagger) barLust.classList.add('mind-break');
+        else barLust.classList.remove('mind-break');
+    }
 
-    let ecstasyLimiar = mods.ecstasy_set !== null ? mods.ecstasy_set : (cStats.ecstasy + char.attr.vig);
-    document.getElementById('dash-ecstasy-threshold').innerText = ecstasyLimiar;
+    if (document.getElementById('dash-ecstasy-threshold')) {
+        document.getElementById('dash-ecstasy-threshold').innerText = maxLu;
+    }
     
-    let ecstasyStage = Math.floor(lu / ecstasyLimiar);
-    if(ecstasyStage < 0) ecstasyStage = 0;
-    document.getElementById('lust-stage').innerText = `Estágio ${ecstasyStage} (${lu} / ${maxLu})`;
+    if (document.getElementById('lust-stage')) {
+        document.getElementById('lust-stage').innerText = isStagger 
+            ? `⚠️ GUARDA QUEBRADA (STAGGER)` 
+            : `Impacto: ${Math.round((lu / maxLu) * 100)}% (${lu} / ${maxLu})`;
+    }
 
     const badge = document.getElementById('dash-condition');
-    if (lu >= maxLu) { badge.className = 'badge badge-lust'; badge.innerHTML = 'Mind Break'; }
-    else if (hp <= 0) { badge.className = 'badge badge-danger'; badge.innerHTML = 'Inconsciente'; }
-    else if (st <= 0) { badge.className = 'badge badge-warning'; badge.innerHTML = 'Caído'; }
-    else if (ecstasyStage > 0) { badge.className = 'badge badge-lust'; badge.innerHTML = `Êxtase (Nível ${ecstasyStage})`; }
-    else { badge.className = 'badge badge-normal'; badge.innerHTML = 'Normal'; }
+    if (badge) {
+        if (isStagger) { badge.className = 'badge badge-lust'; badge.innerHTML = '⚠️ Quebra de Guarda'; }
+        else if (hp <= 0) { badge.className = 'badge badge-danger'; badge.innerHTML = 'Inconsciente'; }
+        else if (st <= 0) { badge.className = 'badge badge-warning'; badge.innerHTML = 'Caído / Exausto'; }
+        else if (lu > maxLu * 0.7) { badge.className = 'badge badge-warning'; badge.innerHTML = 'Guarda Fragilizada'; }
+        else { badge.className = 'badge badge-normal'; badge.innerHTML = 'Firme'; }
+    }
 }
 
 function renderAttributesAndDerivedStats(char, mods) {
-    const totalDF = char.attr.con + mods.df + mods.df_hp;
-    const totalDL = mods.dlust_set !== null ? mods.dlust_set : (char.attr.von + mods.dlust + mods.df_lust);
+    const vit = char.attr.vit ?? char.attr.con ?? char.attr.vig ?? 0;
+    const forAttr = char.attr.for ?? 0;
+    const agi = char.attr.agi ?? 0;
+    const chr = char.attr.chr ?? char.attr.mis ?? char.attr.sed ?? 0;
+    const per = char.attr.per ?? char.attr.von ?? 0;
+
+    const totalDF = vit + mods.df + mods.df_hp;
+    const totalDL = mods.dlust_set !== null ? mods.dlust_set : (per + mods.dlust + mods.df_lust);
     
-    const totalAgi = char.attr.agi + mods.agi;
+    const totalAgi = agi + mods.agi;
     const baseEsq = 8 + mods.esq;
     const minDodge = totalAgi > 0 ? 2 : 0;
     const maxDodge = totalAgi > 0 ? 2 * totalAgi : 0;
     const totalEsq = minDodge === maxDodge ? (baseEsq + minDodge) : `${baseEsq + minDodge}-${baseEsq + maxDodge}`;
+    
     const formatDamageRange = (base, diceArr) => {
         if (!diceArr || diceArr.length === 0) return base;
         let parsed = diceArr.map(d => {
@@ -1646,64 +2001,64 @@ function renderAttributesAndDerivedStats(char, mods) {
         return `${base + minAdd}-${base + maxAdd}`;
     };
 
-    let totalDanFis = formatDamageRange(5 + (char.attr.for) + mods.danFis, mods.danFisDice);
-    let totalDanLust = formatDamageRange(5 + (char.attr.sed) + mods.danLust, mods.danLustDice);
+    let totalDanFis = formatDamageRange(5 + forAttr + mods.danFis, mods.danFisDice);
+    let totalDanChr = formatDamageRange(5 + chr + mods.danLust, mods.danLustDice);
 
-    document.getElementById('dash-df').innerText = totalDF;
-    document.getElementById('dash-dl').innerText = totalDL;
-    document.getElementById('dash-esq').innerText = totalEsq;
-    if(document.getElementById('dash-danfis')) document.getElementById('dash-danfis').innerText = totalDanFis;
-    if(document.getElementById('dash-danlust')) document.getElementById('dash-danlust').innerText = totalDanLust;
+    if (document.getElementById('dash-df')) document.getElementById('dash-df').innerText = totalDF;
+    if (document.getElementById('dash-dl')) document.getElementById('dash-dl').innerText = totalDL;
+    if (document.getElementById('dash-esq')) document.getElementById('dash-esq').innerText = totalEsq;
+    if (document.getElementById('dash-danfis')) document.getElementById('dash-danfis').innerText = totalDanFis;
+    if (document.getElementById('dash-danlust')) document.getElementById('dash-danlust').innerText = totalDanChr;
 
-    // Build tooltips helper
+    // Tooltips helper
     const buildTT = (baseLabel, baseVal, bks) => {
         let h = `<div class='border-b border-white/20 pb-1 mb-1 font-bold'>${baseLabel}: ${baseVal}</div>`;
         if (bks && bks.length > 0) {
-            bks.forEach(b => h += `<div class='flex justify-between'><span>${b.label}:</span> <span class='text-gold'>${b.val}</span></div>`);
+            bks.forEach(b => h += `<div class='flex justify-between'><span>${b.label}:</span> <span class='text-cyan-400'>${b.val}</span></div>`);
         } else {
             h += `<div class='text-gray-500 italic'>Sem modificadores</div>`;
         }
         return h;
     };
 
-    if(document.getElementById('tt-df')) document.getElementById('tt-df').innerHTML = buildTT('Base (CON)', char.attr.con, mods.breakdown.df.concat(mods.breakdown.df_hp));
-    if(document.getElementById('tt-dl')) document.getElementById('tt-dl').innerHTML = buildTT('Base (VON)', char.attr.von, mods.breakdown.dlust.concat(mods.breakdown.df_lust));
-    if(document.getElementById('tt-esq')) document.getElementById('tt-esq').innerHTML = buildTT('Base (8 + 2dAGI)', `8${totalAgi > 0 ? ` + (2 a ${maxDodge})` : ''}`, mods.breakdown.esq);
-    if(document.getElementById('tt-danfis')) document.getElementById('tt-danfis').innerHTML = buildTT('Base (5 + FOR)', 5 + char.attr.for, mods.breakdown.danFis);
-    if(document.getElementById('tt-danlust')) document.getElementById('tt-danlust').innerHTML = buildTT('Base (5 + SED)', 5 + char.attr.sed, mods.breakdown.danLust);
+    if (document.getElementById('tt-df')) document.getElementById('tt-df').innerHTML = buildTT('Base (VIT)', vit, mods.breakdown.df.concat(mods.breakdown.df_hp));
+    if (document.getElementById('tt-dl')) document.getElementById('tt-dl').innerHTML = buildTT('Base (PER)', per, mods.breakdown.dlust.concat(mods.breakdown.df_lust));
+    if (document.getElementById('tt-esq')) document.getElementById('tt-esq').innerHTML = buildTT('Base (8 + 2dAGI)', `8${totalAgi > 0 ? ` + (2 a ${maxDodge})` : ''}`, mods.breakdown.esq);
+    if (document.getElementById('tt-danfis')) document.getElementById('tt-danfis').innerHTML = buildTT('Base (5 + FOR)', 5 + forAttr, mods.breakdown.danFis);
+    if (document.getElementById('tt-danlust')) document.getElementById('tt-danlust').innerHTML = buildTT('Base (5 + CHR)', 5 + chr, mods.breakdown.danLust);
 
-    // HP, ST, Lust, Magia tooltips
+    // HP, ST, Lust, Chroma tooltips
     const baseStats = getClassStats(char.class);
-    if(document.getElementById('tt-hp')) document.getElementById('tt-hp').innerHTML = buildTT('Base', baseStats.hp, mods.breakdown.hp);
-    if(document.getElementById('tt-st')) document.getElementById('tt-st').innerHTML = buildTT('Base', baseStats.st, mods.breakdown.st);
-    if(document.getElementById('tt-lust')) document.getElementById('tt-lust').innerHTML = buildTT('Base', baseStats.lust, mods.breakdown.lust);
-    if(document.getElementById('tt-energy')) document.getElementById('tt-energy').innerHTML = buildTT('Base', baseStats.en, mods.breakdown.en);
+    if (document.getElementById('tt-hp')) document.getElementById('tt-hp').innerHTML = buildTT('Base', baseStats.hp, mods.breakdown.hp);
+    if (document.getElementById('tt-st')) document.getElementById('tt-st').innerHTML = buildTT('Base', baseStats.st, mods.breakdown.st);
+    if (document.getElementById('tt-lust')) document.getElementById('tt-lust').innerHTML = buildTT('Base', baseStats.lust, mods.breakdown.lust);
+    if (document.getElementById('tt-energy')) document.getElementById('tt-energy').innerHTML = buildTT('Base', baseStats.en, mods.breakdown.en);
 
     const mkRow = (name, key, base, mod, icon) => {
         let finalVal = base + (mod || 0);
         let modStr = mod > 0 ? `<span class="text-green-400 text-xs">(+${mod})</span>` : (mod < 0 ? `<span class="text-red-400 text-xs">(${mod})</span>` : '');
-        let bks = mods.breakdown[key] || [];
+        let bks = (mods.breakdown && mods.breakdown[key]) || [];
         let ttHtml = buildTT('Base', base, bks);
         
         return `<div class="group relative flex justify-between items-center py-1.5 border-b border-white/5 cursor-pointer hover:bg-white/5 px-2 -mx-2 rounded transition" onclick="openPerkModal('${key}')">
             <span class="text-gray-400"><i class="fa-solid fa-${icon} w-5"></i> ${name}</span>
             <span class="font-semibold text-lg text-white">${finalVal} ${modStr}</span>
-            <div class="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 w-48 bg-black/95 border border-gold/40 text-left p-3 rounded-lg text-xs opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 text-gray-300 shadow-xl">
+            <div class="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 w-48 bg-black/95 border border-cyan-500/40 text-left p-3 rounded-lg text-xs opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 text-gray-300 shadow-xl">
                 ${ttHtml}
-                <div class="mt-2 text-center text-[10px] text-gold/60 border-t border-gold/10 pt-1">Clique para ver vantagens</div>
+                <div class="mt-2 text-center text-[10px] text-cyan-400/80 border-t border-cyan-500/20 pt-1">Clique para ver vantagens</div>
             </div>
         </div>`;
     };
 
-    document.getElementById('dash-attributes').innerHTML = `
-        ${mkRow('Constituição', 'con', char.attr.con, 0, 'shield-heart')}
-        ${mkRow('Força', 'for', char.attr.for, 0, 'dumbbell')}
-        ${mkRow('Vigor', 'vig', char.attr.vig, 0, 'heart-pulse')}
-        ${mkRow('Agilidade', 'agi', char.attr.agi, mods.agi, 'person-running')}
-        ${mkRow('Vontade', 'von', char.attr.von, 0, 'brain')}
-        ${mkRow('Sedução', 'sed', char.attr.sed, mods.sed, 'face-kiss-wink-heart')}
-        ${mkRow('Misticismo', 'mis', char.attr.mis, mods.mis, 'wand-magic-sparkles')}
-    `;
+    if (document.getElementById('dash-attributes')) {
+        document.getElementById('dash-attributes').innerHTML = `
+            ${mkRow('Força', 'for', forAttr, 0, 'fist-raised')}
+            ${mkRow('Agilidade', 'agi', agi, mods.agi, 'person-running')}
+            ${mkRow('Vitalidade', 'vit', vit, 0, 'heart')}
+            ${mkRow('Chroma', 'chr', chr, mods.mis, 'palette')}
+            ${mkRow('Percepção', 'per', per, mods.von, 'eye')}
+        `;
+    }
 
     const items = getEquippedItems(char);
     const equipContainer = document.getElementById('dash-equipment-list');
@@ -1859,18 +2214,20 @@ function initPerksUI() {
     if (!container) return;
     container.innerHTML = '';
     
+    if (typeof PERKS_DB === 'undefined' || !PERKS_DB) return;
     Object.keys(PERKS_DB).forEach(attrKey => {
         const attrData = PERKS_DB[attrKey];
+        if (!attrData || !attrData.perks) return;
         
         const block = document.createElement('div');
-        block.className = 'border border-gold/20 rounded bg-black/40 mb-3';
+        block.className = 'border border-[#bfa888]/25 rounded-lg bg-[#0e0b09] mb-3 overflow-hidden shadow-md';
         block.innerHTML = `
-            <div class="p-3 flex justify-between items-center cursor-pointer bg-gold/10 hover:bg-gold/20 transition" onclick="this.nextElementSibling.classList.toggle('hidden')">
-                <div class="font-cinzel text-gold font-bold"><i class="fa-solid ${attrData.icon} mr-2"></i>${attrData.name}</div>
-                <div class="text-xs text-gray-300 font-mono">PV: <span id="pv-used-${attrKey}">0</span> / <span id="pv-max-${attrKey}">0</span></div>
+            <div class="p-3 flex justify-between items-center cursor-pointer bg-[#181310] hover:bg-[#201915] transition border-b border-[#bfa888]/15" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="text-[#bfa888] font-bold text-xs tracking-wider uppercase"><i class="fa-solid ${attrData.icon} mr-2"></i>${attrData.name}</div>
+                <div class="text-xs text-[#a89f91] font-mono bg-[#0c0a08] px-2 py-0.5 rounded border border-[#bfa888]/20">PV: <span id="pv-used-${attrKey}" class="text-[#bfa888] font-bold">0</span> / <span id="pv-max-${attrKey}">0</span></div>
             </div>
-            <div class="p-3 hidden space-y-3" id="perks-list-${attrKey}">
-                ${Object.keys(attrData.perks).length === 0 ? '<div class="text-xs text-gray-500 italic text-center">Vantagens em desenvolvimento pelo Game Designer...</div>' : ''}
+            <div class="p-3 hidden space-y-3 bg-[#0a0807]/90" id="perks-list-${attrKey}">
+                ${Object.keys(attrData.perks).length === 0 ? '<div class="text-xs text-[#7a7164] italic text-center py-2 ">Vantagens em desenvolvimento pelo Game Designer...</div>' : ''}
             </div>
         `;
         container.appendChild(block);
@@ -1878,18 +2235,18 @@ function initPerksUI() {
         const list = document.getElementById(`perks-list-${attrKey}`);
         Object.keys(attrData.perks).forEach(pName => {
             const row = document.createElement('div');
-            row.className = 'p-3 bg-gray-900 rounded-lg border border-gray-700 shadow-sm flex flex-col gap-2 transition-all opacity-60 grayscale-[50%]';
+            row.className = 'p-3 bg-[#0e0e10] rounded border border-[#bfa888]/20 shadow-sm flex flex-col gap-2 transition-all opacity-70';
             row.id = `pcard-${attrKey}-${btoa(pName).replace(/=/g, '')}`;
             row.innerHTML = `
                 <div class="flex justify-between items-start gap-2">
-                    <span class="font-bold text-sm text-gold leading-tight drop-shadow-md flex-1">${escapeHTML(pName)}</span>
-                    <div class="flex items-center bg-black/60 rounded border border-gray-800 shrink-0">
-                        <button type="button" class="w-8 h-8 flex items-center justify-center text-red-400 hover:bg-white/10 transition-colors" onclick="adjustPerk('${attrKey}', '${pName.replace(/'/g, "\\'")}', -1)"><i class="fa-solid fa-minus text-xs"></i></button>
-                        <span class="font-mono text-xs w-6 text-center text-white font-bold" id="plvl-${attrKey}-${btoa(pName).replace(/=/g, '')}">0</span>
-                        <button type="button" class="w-8 h-8 flex items-center justify-center text-green-400 hover:bg-white/10 transition-colors" onclick="adjustPerk('${attrKey}', '${pName.replace(/'/g, "\\'")}', 1)"><i class="fa-solid fa-plus text-xs"></i></button>
+                    <span class="font-bold text-xs text-[#ede3d2] tracking-wide leading-tight flex-1">${escapeHTML(pName)}</span>
+                    <div class="flex items-center bg-[#070605] rounded border border-[#bfa888]/30 shrink-0">
+                        <button type="button" class="w-7 h-7 flex items-center justify-center text-[#991b1b] hover:bg-[#251e18] transition-colors" onclick="adjustPerk('${attrKey}', '${pName.replace(/'/g, "\\'")}', -1)"><i class="fa-solid fa-minus text-[10px]"></i></button>
+                        <span class="font-mono text-xs w-6 text-center text-[#ede3d2] font-bold" id="plvl-${attrKey}-${btoa(pName).replace(/=/g, '')}">0</span>
+                        <button type="button" class="w-7 h-7 flex items-center justify-center text-[#bfa888] hover:bg-[#251e18] transition-colors" onclick="adjustPerk('${attrKey}', '${pName.replace(/'/g, "\\'")}', 1)"><i class="fa-solid fa-plus text-[10px]"></i></button>
                     </div>
                 </div>
-                <div class="text-[11px] md:text-xs text-gray-500 italic bg-black/40 p-2 rounded border-l-2 border-gray-700 transition-colors min-h-[36px]" id="pdesc-${attrKey}-${btoa(pName).replace(/=/g, '')}">Nenhum ponto investido. Toque em (+) para revelar.</div>
+                <div class="text-[11px] md:text-xs text-[#7a7164] italic bg-[#070605]/80 p-2 rounded border-l-2 border-[#bfa888]/30 transition-colors min-h-[36px]" id="pdesc-${attrKey}-${btoa(pName).replace(/=/g, '')}">Nenhum ponto investido. Toque em (+) para revelar.</div>
             `;
             list.appendChild(row);
         });
@@ -1897,59 +2254,70 @@ function initPerksUI() {
 }
 
 function updatePerksMath() {
+    const vFor = parseInt(document.getElementById('inp-for')?.value) || 0;
+    const vAgi = parseInt(document.getElementById('inp-agi')?.value) || 0;
+    const vVit = parseInt(document.getElementById('inp-vit')?.value) || parseInt(document.getElementById('inp-con')?.value) || parseInt(document.getElementById('inp-vig')?.value) || 0;
+    const vChr = parseInt(document.getElementById('inp-chr')?.value) || parseInt(document.getElementById('inp-mis')?.value) || parseInt(document.getElementById('inp-sed')?.value) || 0;
+    const vPer = parseInt(document.getElementById('inp-per')?.value) || parseInt(document.getElementById('inp-von')?.value) || 0;
+
     const attrs = {
-        con: parseInt(document.getElementById('inp-con').value) || 0,
-        for: parseInt(document.getElementById('inp-for').value) || 0,
-        vig: parseInt(document.getElementById('inp-vig').value) || 0,
-        agi: parseInt(document.getElementById('inp-agi').value) || 0,
-        von: parseInt(document.getElementById('inp-von').value) || 0,
-        sed: parseInt(document.getElementById('inp-sed').value) || 0,
-        mis: parseInt(document.getElementById('inp-mis').value) || 0
+        for: vFor,
+        agi: vAgi,
+        vit: vVit,
+        chr: vChr,
+        per: vPer,
+        con: vVit,
+        vig: vVit,
+        von: vPer,
+        sed: vChr,
+        mis: vChr
     };
 
     let allValid = true;
     let allSpent = true;
 
-    Object.keys(PERKS_DB).forEach(attrKey => {
-        const maxPV = Math.max(0, attrs[attrKey] * 2);
-        let usedPV = 0;
-        
-        // Reset Visuals
-        Object.keys(PERKS_DB[attrKey].perks).forEach(pName => {
-            const safeName = btoa(pName).replace(/=/g, '');
-            const lvlEl = document.getElementById(`plvl-${attrKey}-${safeName}`);
-            const descEl = document.getElementById(`pdesc-${attrKey}-${safeName}`);
-            const cardEl = document.getElementById(`pcard-${attrKey}-${safeName}`);
+    if (typeof PERKS_DB === 'object' && PERKS_DB) {
+        Object.keys(PERKS_DB).forEach(attrKey => {
+            if (!PERKS_DB[attrKey] || !PERKS_DB[attrKey].perks) return;
+            const maxPV = Math.max(0, (attrs[attrKey] || 0) * 2);
+            let usedPV = 0;
             
-            if (lvlEl) { lvlEl.innerText = `0`; }
-            if (descEl) { 
-                descEl.innerText = 'Nenhum ponto investido. Toque em (+) para revelar os poderes.'; 
-                descEl.className = 'text-[11px] md:text-xs text-gray-500 italic bg-black/40 p-2 rounded border-l-2 border-gray-700 transition-colors min-h-[36px]';
-            }
-            if (cardEl) {
-                cardEl.className = 'p-3 bg-gray-900 rounded-lg border border-gray-700 shadow-sm flex flex-col gap-2 transition-all opacity-60 grayscale-[50%]';
-            }
-        });
+            // Reset Visuals
+            Object.keys(PERKS_DB[attrKey].perks).forEach(pName => {
+                const safeName = btoa(pName).replace(/=/g, '');
+                const lvlEl = document.getElementById(`plvl-${attrKey}-${safeName}`);
+                const descEl = document.getElementById(`pdesc-${attrKey}-${safeName}`);
+                const cardEl = document.getElementById(`pcard-${attrKey}-${safeName}`);
+                
+                if (lvlEl) { lvlEl.innerText = `0`; }
+                if (descEl) { 
+                    descEl.innerText = 'Nenhum ponto investido. Toque em (+) para revelar as bênçãos.'; 
+                    descEl.className = 'text-[11px] md:text-xs text-[#7a7164] italic bg-[#070605]/80 p-2 rounded border-l-2 border-[#bfa888]/30 transition-colors min-h-[36px]';
+                }
+                if (cardEl) {
+                    cardEl.className = 'p-3 bg-[#0e0e10] rounded border border-[#bfa888]/20 shadow-sm flex flex-col gap-2 transition-all opacity-70';
+                }
+            });
 
-        if (draftPerks[attrKey]) {
-            Object.keys(draftPerks[attrKey]).forEach(pName => {
-                const lvl = draftPerks[attrKey][pName];
-                if (lvl > 0) {
-                    usedPV += PERK_COSTS[lvl];
-                    const safeName = btoa(pName).replace(/=/g, '');
-                    const lvlEl = document.getElementById(`plvl-${attrKey}-${safeName}`);
-                    const descEl = document.getElementById(`pdesc-${attrKey}-${safeName}`);
-                    const cardEl = document.getElementById(`pcard-${attrKey}-${safeName}`);
-                    
-                    if (lvlEl && descEl && cardEl && PERKS_DB[attrKey].perks[pName]) {
-                        lvlEl.innerText = `${lvl}`;
+            if (draftPerks[attrKey]) {
+                Object.keys(draftPerks[attrKey]).forEach(pName => {
+                    const lvl = draftPerks[attrKey][pName];
+                    if (lvl > 0) {
+                        usedPV += PERK_COSTS[lvl] || 0;
+                        const safeName = btoa(pName).replace(/=/g, '');
+                        const lvlEl = document.getElementById(`plvl-${attrKey}-${safeName}`);
+                        const descEl = document.getElementById(`pdesc-${attrKey}-${safeName}`);
+                        const cardEl = document.getElementById(`pcard-${attrKey}-${safeName}`);
+                        
+                        if (lvlEl && descEl && cardEl && PERKS_DB[attrKey] && PERKS_DB[attrKey].perks && PERKS_DB[attrKey].perks[pName]) {
+                            lvlEl.innerText = `${lvl}`;
                         descEl.innerText = PERKS_DB[attrKey].perks[pName][lvl-1];
                         
-                        cardEl.className = 'p-3 bg-gray-800 rounded-lg border border-gold/40 shadow-[0_0_10px_rgba(218,165,32,0.1)] flex flex-col gap-2 transition-all';
-                        descEl.className = 'text-[11px] md:text-xs text-gray-200 bg-black/60 p-2 rounded border-l-2 border-purple-500 transition-colors min-h-[36px] font-medium leading-relaxed';
+                        cardEl.className = 'p-3 bg-[#181310] rounded border border-[#bfa888]/50 shadow-[0_2px_12px_rgba(0,0,0,0.8)] flex flex-col gap-2 transition-all';
+                        descEl.className = 'text-[11px] md:text-xs text-[#ede3d2] bg-[#070605] p-2 rounded border-l-2 border-[#bfa888] transition-colors min-h-[36px] font-medium leading-relaxed italic';
                         
                         if(lvl === 7) {
-                            cardEl.classList.add('border-purple-500', 'shadow-[0_0_15px_rgba(168,85,247,0.3)]');
+                            cardEl.classList.add('border-purple-500/80', 'shadow-[0_0_15px_rgba(168,85,247,0.3)]');
                             descEl.classList.add('text-purple-300', 'font-bold');
                         }
                     }
@@ -1963,16 +2331,17 @@ function updatePerksMath() {
             usedEl.innerText = usedPV;
             maxEl.innerText = maxPV;
             if(usedPV > maxPV) {
-                usedEl.className = 'text-red-500 font-bold';
+                usedEl.className = 'text-red-400 font-bold';
                 allValid = false;
             } else {
-                usedEl.className = 'text-white';
+                usedEl.className = 'text-[#bfa888] font-bold';
             }
             if(usedPV < maxPV) {
                 allSpent = false;
             }
         }
     });
+    }
     
     return { allValid, allSpent };
 }
@@ -1990,15 +2359,15 @@ window.adjustPerk = function(attrKey, perkName, delta) {
 window.switchCharTab = function(tab) {
     document.getElementById('char-tab-base').classList.add('hidden');
     document.getElementById('char-tab-perks').classList.add('hidden');
-    document.getElementById('btn-tab-base').className = 'px-3 py-1 text-sm border-b-2 border-transparent text-gray-400 hover:text-white';
-    document.getElementById('btn-tab-perks').className = 'px-3 py-1 text-sm border-b-2 border-transparent text-gray-400 hover:text-white';
+    document.getElementById('btn-tab-base').className = 'px-3 py-1.5 text-xs font-medium tracking-wider uppercase border-b-2 border-transparent text-stone-400 hover:text-[#ede3d2] transition';
+    document.getElementById('btn-tab-perks').className = 'px-3 py-1.5 text-xs font-medium tracking-wider uppercase border-b-2 border-transparent text-stone-400 hover:text-[#ede3d2] transition';
     
     if (tab === 'base') {
         document.getElementById('char-tab-base').classList.remove('hidden');
-        document.getElementById('btn-tab-base').className = 'px-3 py-1 text-sm border-b-2 border-gold text-white';
+        document.getElementById('btn-tab-base').className = 'px-3 py-1.5 text-xs font-bold tracking-wider uppercase border-b-2 border-[#bfa888] text-[#ede3d2] transition';
     } else {
         document.getElementById('char-tab-perks').classList.remove('hidden');
-        document.getElementById('btn-tab-perks').className = 'px-3 py-1 text-sm border-b-2 border-gold text-white';
+        document.getElementById('btn-tab-perks').className = 'px-3 py-1.5 text-xs font-bold tracking-wider uppercase border-b-2 border-[#bfa888] text-[#ede3d2] transition';
         updatePerksMath();
     }
 }
@@ -2007,6 +2376,7 @@ window.switchCharTab = function(tab) {
 window.openNewMonsterModal = function() {
     editingMonsterId = null;
     document.getElementById('form-monster').reset();
+    if (document.getElementById('inp-monster-flying')) document.getElementById('inp-monster-flying').checked = false;
     document.querySelectorAll('#monster-modifiers-table tbody tr').forEach(row => {
         row.querySelector('.mod-vuln').value = '';
         row.querySelector('.mod-red').value = '';
@@ -2038,6 +2408,8 @@ document.getElementById('form-monster').addEventListener('submit', (e) => {
         }
     });
     
+    const isFlyingVal = document.getElementById('inp-monster-flying')?.checked || false;
+
     const newMonster = {
         id: editingMonsterId || generateId(),
         ownerId: currentUser ? currentUser.uid : null,
@@ -2052,6 +2424,7 @@ document.getElementById('form-monster').addEventListener('submit', (e) => {
         von: parseInt(document.getElementById('inp-monster-von').value) || 5,
         desc: document.getElementById('inp-monster-desc').value,
         modifiers: mods,
+        isFlying: isFlyingVal,
         isMonster: true
     };
     
@@ -2074,6 +2447,7 @@ window.openEditMonster = function(id) {
     document.getElementById('inp-monster-name').value = m.name;
     document.getElementById('inp-monster-avatar').value = m.avatar || '';
     if(document.getElementById('inp-monster-type')) document.getElementById('inp-monster-type').value = m.type || '';
+    if(document.getElementById('inp-monster-flying')) document.getElementById('inp-monster-flying').checked = !!m.isFlying;
     document.getElementById('inp-monster-hp').value = m.hp;
     document.getElementById('inp-monster-st').value = m.stamina;
     document.getElementById('inp-monster-lust').value = m.lust;
@@ -2094,30 +2468,115 @@ window.openEditMonster = function(id) {
 };
 
 // --- RPG TRACKER LOGIC ---
+window.combatAddMode = 'select';
+window.switchCombatAddMode = function(mode) {
+    window.combatAddMode = mode;
+    const btnSel = document.getElementById('tab-combat-add-select');
+    const btnCust = document.getElementById('tab-combat-add-custom');
+    const divSel = document.getElementById('combat-add-mode-select');
+    const divCust = document.getElementById('combat-add-mode-custom');
+    if (mode === 'select') {
+        if(btnSel) btnSel.className = 'flex-1 py-2 font-bold text-xs tracking-wider uppercase bg-[#251e18] text-[#ede3d2] border-b-2 border-[#bfa888] transition';
+        if(btnCust) btnCust.className = 'flex-1 py-2 font-bold text-xs tracking-wider uppercase bg-[#0e0e10] text-stone-400 border-b-2 border-transparent hover:text-stone-200 transition';
+        if(divSel) divSel.classList.remove('hidden');
+        if(divCust) divCust.classList.add('hidden');
+    } else {
+        if(btnCust) btnCust.className = 'flex-1 py-2 font-bold text-xs tracking-wider uppercase bg-[#251e18] text-[#ede3d2] border-b-2 border-[#bfa888] transition';
+        if(btnSel) btnSel.className = 'flex-1 py-2 font-bold text-xs tracking-wider uppercase bg-[#0e0e10] text-stone-400 border-b-2 border-transparent hover:text-stone-200 transition';
+        if(divCust) divCust.classList.remove('hidden');
+        if(divSel) divSel.classList.add('hidden');
+    }
+};
+
+const EXPEDITION_ARCHETYPES = [
+    { id: 'tpl_gustave', name: 'Gustave (Vanguarda)', type: 'char', hp: 120, maxHp: 120, stamina: 110, maxSt: 110, lust: 0, maxLust: 115, energy: 30, maxEn: 30, attr: { for: 3, agi: 1, vit: 3, chr: 0, per: 1 } },
+    { id: 'tpl_lune', name: 'Lune (Pintora Mística)', type: 'char', hp: 90, maxHp: 90, stamina: 100, maxSt: 100, lust: 0, maxLust: 85, energy: 60, maxEn: 60, attr: { for: 0, agi: 2, vit: 1, chr: 4, per: 2 } },
+    { id: 'tpl_maelle', name: 'Maelle (Esgrimista)', type: 'char', hp: 100, maxHp: 100, stamina: 120, maxSt: 120, lust: 0, maxLust: 95, energy: 35, maxEn: 35, attr: { for: 1, agi: 4, vit: 1, chr: 1, per: 3 } },
+    { id: 'tpl_renoir', name: 'Renoir (Atirador da Névoa)', type: 'char', hp: 95, maxHp: 95, stamina: 115, maxSt: 115, lust: 0, maxLust: 90, energy: 40, maxEn: 40, attr: { for: 1, agi: 2, vit: 1, chr: 2, per: 4 } },
+    { id: 'tpl_verso', name: 'Verso (Guardião do Monólito)', type: 'char', hp: 140, maxHp: 140, stamina: 100, maxSt: 100, lust: 0, maxLust: 130, energy: 25, maxEn: 25, attr: { for: 4, agi: 0, vit: 4, chr: 0, per: 2 } }
+];
+
+const EXPEDITION_NEVII = [
+    { id: 'tpl_nevii_soldado', name: 'Nevii de Tinta (Soldado)', type: 'monster', hp: 80, maxHp: 80, stamina: 80, maxSt: 80, lust: 0, maxLust: 70, energy: 40, maxEn: 40, ini: 11, isFlying: false },
+    { id: 'tpl_nevii_alado', name: 'Nevii Alado (Ágil)', type: 'monster', hp: 65, maxHp: 65, stamina: 100, maxSt: 100, lust: 0, maxLust: 50, energy: 30, maxEn: 30, ini: 15, isFlying: true },
+    { id: 'tpl_nevii_titanico', name: 'Nevii Titânico do Monólito (Bruto)', type: 'monster', hp: 220, maxHp: 220, stamina: 90, maxSt: 90, lust: 0, maxLust: 160, energy: 50, maxEn: 50, ini: 8, isFlying: false },
+    { id: 'tpl_nevii_corruptor', name: 'Nevii Corruptor de Pigmento', type: 'monster', hp: 110, maxHp: 110, stamina: 95, maxSt: 95, lust: 0, maxLust: 85, energy: 70, maxEn: 70, ini: 13, isFlying: false }
+];
+
 document.getElementById('btn-combat-add').onclick = () => {
+    switchCombatAddMode('select');
     const sel = document.getElementById('inp-combat-select');
-    sel.innerHTML = '<option value="">-- Selecione --</option>';
+    sel.innerHTML = '<option value="">-- Selecione um Combatente ou Modelo --</option>';
     
-    const optGroupChars = document.createElement('optgroup');
-    optGroupChars.label = 'Personagens';
-    characters.forEach(c => {
+    // Check fallback if memory array is empty
+    let charList = characters.length > 0 ? characters : [];
+    if (charList.length === 0) {
+        try {
+            const raw = localStorage.getItem('bd_characters');
+            if (raw) charList = JSON.parse(raw);
+        } catch(e) {}
+    }
+    
+    let monList = monsters.length > 0 ? monsters : [];
+    if (monList.length === 0) {
+        try {
+            const raw = localStorage.getItem('bd_monsters');
+            if (raw) monList = JSON.parse(raw);
+        } catch(e) {}
+    }
+
+    if (charList.length > 0) {
+        const optGroupChars = document.createElement('optgroup');
+        optGroupChars.label = 'Expedicionários Salvos';
+        charList.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = 'char|' + c.id;
+            opt.innerText = c.name + (c.class ? ` (${c.class})` : '');
+            optGroupChars.appendChild(opt);
+        });
+        sel.appendChild(optGroupChars);
+    }
+    
+    if (monList.length > 0) {
+        const optGroupMonsters = document.createElement('optgroup');
+        optGroupMonsters.label = 'Nevii & Monstros Salvos';
+        monList.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = 'monster|' + m.id;
+            opt.innerText = m.name;
+            optGroupMonsters.appendChild(opt);
+        });
+        sel.appendChild(optGroupMonsters);
+    }
+
+    // Modelos da Expedição 33
+    const optGroupArch = document.createElement('optgroup');
+    optGroupArch.label = 'Modelos da Expedição 33 (Pré-definidos)';
+    EXPEDITION_ARCHETYPES.forEach(a => {
         const opt = document.createElement('option');
-        opt.value = 'char|' + c.id;
-        opt.innerText = c.name;
-        optGroupChars.appendChild(opt);
+        opt.value = 'arch|' + a.id;
+        opt.innerText = `[Expedição] ${a.name}`;
+        optGroupArch.appendChild(opt);
     });
-    
-    const optGroupMonsters = document.createElement('optgroup');
-    optGroupMonsters.label = 'Monstros';
-    monsters.forEach(m => {
+    sel.appendChild(optGroupArch);
+
+    // Nevii Inimigos
+    const optGroupNevii = document.createElement('optgroup');
+    optGroupNevii.label = 'Nevii Inimigos (Pré-definidos)';
+    EXPEDITION_NEVII.forEach(n => {
         const opt = document.createElement('option');
-        opt.value = 'monster|' + m.id;
-        opt.innerText = m.name;
-        optGroupMonsters.appendChild(opt);
+        opt.value = 'nevii|' + n.id;
+        opt.innerText = `[Nevii] ${n.name}`;
+        optGroupNevii.appendChild(opt);
     });
+    sel.appendChild(optGroupNevii);
     
-    sel.appendChild(optGroupChars);
-    sel.appendChild(optGroupMonsters);
+    // Auto-select first available option
+    if (charList.length > 0) {
+        sel.value = 'char|' + charList[0].id;
+    } else {
+        sel.value = 'arch|tpl_gustave';
+    }
     
     document.getElementById('inp-combat-ini').value = '';
     document.getElementById('modal-combat-add').showModal();
@@ -2125,75 +2584,242 @@ document.getElementById('btn-combat-add').onclick = () => {
 
 document.getElementById('btn-combat-confirm').onclick = () => {
     try {
-        const val = document.getElementById('inp-combat-select').value;
-        if(!val) return;
-        
-        const type = val.split('|')[0];
-        const id = val.split('|')[1];
-        
-        let source = null;
-        if (type === 'char') source = characters.find(c => c.id === id);
-        if (type === 'monster') source = monsters.find(m => m.id === id);
-        
-        if(!source) return;
-        
+        let combatant = null;
         const iniVal = document.getElementById('inp-combat-ini').value;
         let roll = parseInt(iniVal);
-        const isMon = type === 'monster';
-        
-        if (isNaN(roll)) {
-            const baseIni = isMon ? (source.ini || 10) : (source.attr?.agi || 0);
-            roll = baseIni + Math.floor(Math.random() * 20) + 1;
+
+        if (window.combatAddMode === 'custom') {
+            const customName = document.getElementById('inp-combat-custom-name').value.trim() || 'Combatente Rápido';
+            const customType = document.getElementById('inp-combat-custom-type').value;
+            const isMon = customType === 'monster';
+            const hp = parseInt(document.getElementById('inp-combat-custom-hp').value) || 100;
+            const postura = parseInt(document.getElementById('inp-combat-custom-postura').value) || 80;
+            const stamina = parseInt(document.getElementById('inp-combat-custom-stamina').value) || 100;
+            
+            if (isNaN(roll)) {
+                roll = Math.floor(Math.random() * 20) + 1 + 10;
+            }
+
+            combatant = {
+                cid: generateId(),
+                refId: null,
+                isMonster: isMon,
+                name: customName,
+                avatar: '',
+                ini: roll,
+                hp: hp,
+                maxHp: hp,
+                stamina: stamina,
+                maxSt: stamina,
+                lust: 0,
+                maxLust: postura,
+                energy: 30,
+                maxEn: 50,
+                attr: { for: 2, agi: 2, vit: 2, chr: 2, per: 2 }
+            };
+        } else {
+            const val = document.getElementById('inp-combat-select').value;
+            if(!val) return alert("Por favor, selecione um combatente ou modelo da lista!");
+            
+            const parts = val.split('|');
+            const type = parts[0];
+            const id = parts[1];
+            
+            if (type === 'arch') {
+                const arch = EXPEDITION_ARCHETYPES.find(a => a.id === id);
+                if (!arch) return;
+                if (isNaN(roll)) roll = Math.floor(Math.random() * 20) + 1 + (arch.attr?.agi || 0);
+                combatant = {
+                    cid: generateId(),
+                    refId: null,
+                    isMonster: false,
+                    name: arch.name,
+                    avatar: '',
+                    ini: roll,
+                    hp: arch.hp,
+                    maxHp: arch.maxHp,
+                    stamina: arch.stamina,
+                    maxSt: arch.maxSt,
+                    lust: 0,
+                    maxLust: arch.maxLust,
+                    energy: arch.energy,
+                    maxEn: arch.maxEn,
+                    attr: arch.attr
+                };
+            } else if (type === 'nevii') {
+                const nevii = EXPEDITION_NEVII.find(n => n.id === id);
+                if (!nevii) return;
+                if (isNaN(roll)) roll = (nevii.ini || 10) + Math.floor(Math.random() * 20) + 1;
+                combatant = {
+                    cid: generateId(),
+                    refId: null,
+                    isMonster: true,
+                    isFlying: !!nevii.isFlying,
+                    name: nevii.name,
+                    avatar: '',
+                    ini: roll,
+                    hp: nevii.hp,
+                    maxHp: nevii.maxHp,
+                    stamina: nevii.stamina,
+                    maxSt: nevii.maxSt,
+                    lust: 0,
+                    maxLust: nevii.maxLust,
+                    energy: nevii.energy,
+                    maxEn: nevii.maxEn,
+                    attr: { for: 2, agi: 2, vit: 2, chr: 2, per: 2 }
+                };
+            } else {
+                let source = null;
+                if (type === 'char') {
+                    source = characters.find(c => c.id === id);
+                    if (!source) {
+                        try {
+                            const raw = localStorage.getItem('bd_characters');
+                            if (raw) source = JSON.parse(raw).find(c => c.id === id);
+                        } catch(e) {}
+                    }
+                }
+                if (type === 'monster') {
+                    source = monsters.find(m => m.id === id);
+                    if (!source) {
+                        try {
+                            const raw = localStorage.getItem('bd_monsters');
+                            if (raw) source = JSON.parse(raw).find(m => m.id === id);
+                        } catch(e) {}
+                    }
+                }
+                
+                if(!source) return alert("Não foi possível carregar os dados do combatente.");
+                
+                const isMon = type === 'monster';
+                if (isNaN(roll)) {
+                    const baseIni = isMon ? (source.ini || 10) : (source.attr?.agi || 0);
+                    roll = baseIni + Math.floor(Math.random() * 20) + 1;
+                }
+                
+                const cStats = isMon ? null : getClassStats(source.class);
+                const mods = isMon ? null : getCharModifiers(source);
+                
+                const attr = source.attr || { for: 0, agi: 0, vit: 0, chr: 0, per: 0 };
+                const vit = attr.vit ?? attr.con ?? attr.vig ?? 0;
+                const chrAttr = attr.chr ?? attr.mis ?? attr.sed ?? 0;
+                let mhp = isMon ? (source.hp || 100) : Math.max(1, Math.floor((cStats.hp + (vit * 10)) * (mods ? mods.hp_mult : 1)));
+                let mst = isMon ? (source.stamina || 100) : Math.max(1, Math.floor((cStats.st + (vit * 5)) * (mods ? mods.st_mult : 1)));
+                let mlu = isMon ? (source.lust || 100) : ((cStats.lust || 100) + (vit * 5) + (mods && mods.lust_max ? mods.lust_max : 0));
+                let men = isMon ? 50 : ((cStats.en || 30) + (chrAttr * 5));
+                
+                combatant = {
+                    cid: generateId(),
+                    refId: source.id,
+                    isMonster: isMon,
+                    isFlying: isMon ? (!!source.isFlying || window.isFlyingCreature(source)) : false,
+                    name: source.name,
+                    avatar: isMon ? (source.avatar || '') : (source.avatarUrl || ''),
+                    ini: roll,
+                    hp: source.hp !== undefined ? source.hp : mhp,
+                    maxHp: mhp,
+                    stamina: source.stamina !== undefined ? source.stamina : mst,
+                    maxSt: mst,
+                    lust: source.lust || 0,
+                    maxLust: mlu,
+                    energy: source.energy !== undefined ? source.energy : 30,
+                    maxEn: men,
+                    attr: attr
+                };
+            }
         }
-        
-        const cStats = isMon ? null : getClassStats(source.class);
-        const mods = isMon ? null : getCharModifiers(source);
-        
-        const attr = source.attr || { con: 0, vig: 0, agi: 0 };
-        let mhp = isMon ? source.hp : Math.max(1, Math.floor((cStats.hp + (attr.con * 10)) * mods.hp_mult));
-        let mst = isMon ? source.stamina : Math.max(1, Math.floor((cStats.st + (attr.vig * 5)) * mods.st_mult));
-        let mlu = isMon ? source.lust : cStats.lust;
-        
-        const combatant = {
-            cid: generateId(),
-            refId: source.id,
-            isMonster: isMon,
-            name: source.name,
-            avatar: isMon ? (source.avatar || '') : (source.avatarUrl || ''),
-            ini: roll,
-            hp: source.hp,
-            maxHp: mhp,
-            stamina: source.stamina,
-            maxSt: mst,
-            lust: source.lust || 0,
-            maxLust: mlu
-        };
-        
-        combatState.combatants.push(combatant);
-        sortCombatants();
-        document.getElementById('modal-combat-add').close();
-        renderRPG();
+
+        if (combatant) {
+            combatState.combatants.push(combatant);
+            sortCombatants();
+            if (!combatState.selectedTargetCid) {
+                combatState.selectedTargetCid = combatant.cid;
+            }
+            document.getElementById('modal-combat-add').close();
+            renderRPG();
+            appendCombatLog(`➕ <strong>${escapeHTML(combatant.name)}</strong> entrou na batalha (Iniciativa: ${combatant.ini}, HP: ${combatant.hp}/${combatant.maxHp}).`, 'info');
+        }
     } catch (err) {
-        alert("Erro no botão Adicionar: " + err.message + "\nStack: " + err.stack);
+        alert("Erro ao adicionar combatente: " + err.message);
         console.error(err);
     }
 };
 
-document.getElementById('btn-combat-next').onclick = () => {
-    if(combatState.combatants.length === 0) return;
+window.nextTurn = function() {
+    if(!combatState.combatants || combatState.combatants.length === 0) return;
+    
+    if (combatState.combatants.length === 1) {
+        combatState.round++;
+        renderRPG();
+        appendCombatLog(`🔔 Novo turno de <strong>${escapeHTML(combatState.combatants[0].name)}</strong>! (Rodada ${combatState.round})`, 'info');
+        return;
+    }
+
     const first = combatState.combatants.shift();
     combatState.combatants.push(first);
     combatState.round++;
     renderRPG();
-};
-
-document.getElementById('btn-combat-clear').onclick = () => {
-    if(confirm("Deseja encerrar o combate e limpar a mesa?")) {
-        combatState.combatants = [];
-        combatState.round = 1;
-        renderRPG();
+    if (combatState.combatants[0]) {
+        appendCombatLog(`🔔 Início do turno de <strong>${escapeHTML(combatState.combatants[0].name)}</strong>! (Rodada ${Math.floor((combatState.round - 1) / Math.max(1, combatState.combatants.length)) + 1})`, 'info');
     }
 };
+
+window.advanceTurnForCombatant = function(cid) {
+    if (!combatState.combatants || combatState.combatants.length === 0) return;
+    
+    const idx = combatState.combatants.findIndex(x => x.cid === cid);
+    if (idx <= 0) {
+        // Se o primeiro agiu, avança normalmente
+        window.nextTurn();
+    } else {
+        // Se um combatente agiu fora do primeiro slot, rotaciona a fila
+        // para que ele e os anteriores vão para o fim da rodada e o próximo assuma a vez
+        const moved = combatState.combatants.splice(0, idx + 1);
+        combatState.combatants.push(...moved);
+        combatState.round++;
+        renderRPG();
+        if (combatState.combatants[0]) {
+            appendCombatLog(`🔔 Início do turno de <strong>${escapeHTML(combatState.combatants[0].name)}</strong>! (Rodada ${Math.floor((combatState.round - 1) / Math.max(1, combatState.combatants.length)) + 1})`, 'info');
+        }
+    }
+};
+
+window.setTurnToCombatant = function(cid) {
+    if (!combatState.combatants || combatState.combatants.length <= 1) return;
+    const idx = combatState.combatants.findIndex(x => x.cid === cid);
+    if (idx <= 0) return;
+    const moved = combatState.combatants.splice(0, idx);
+    combatState.combatants.push(...moved);
+    renderRPG();
+    if (combatState.combatants[0]) {
+        appendCombatLog(`⚡ Turno concedido manualmente a <strong>${escapeHTML(combatState.combatants[0].name)}</strong>!`, 'info');
+    }
+};
+
+const elBtnCombatNext = document.getElementById('btn-combat-next');
+if (elBtnCombatNext) {
+    elBtnCombatNext.onclick = window.nextTurn;
+}
+
+const elBtnCombatClear = document.getElementById('btn-combat-clear');
+if (elBtnCombatClear) {
+    elBtnCombatClear.onclick = () => {
+        window.showConfirmDialog({
+            title: 'Limpar Combate',
+            heading: 'Encerrar Batalha',
+            messageHtml: 'Deseja encerrar o combate e limpar a mesa da <strong>Expedição 33</strong>?',
+            subtext: 'Todos os combatentes ativos serão removidos da mesa.',
+            confirmText: 'Limpar Mesa',
+            onConfirm: () => {
+                combatState.combatants = [];
+                combatState.round = 1;
+                combatState.selectedTargetCid = null;
+                clearCombatLog();
+                renderRPG();
+            }
+        });
+    };
+}
 
 function sortCombatants() {
     combatState.combatants.sort((a, b) => b.ini - a.ini);
@@ -2203,21 +2829,22 @@ window.adjustCombatStat = function(cid, stat, delta) {
     const c = combatState.combatants.find(x => x.cid === cid);
     if(!c) return;
     
-    // Auto-heal NaN corruptions from previous bug
+    // Auto-heal NaN corruptions
     if(isNaN(c[stat]) || c[stat] === null) {
         if(stat === 'hp') c[stat] = c.maxHp || 100;
         else if(stat === 'stamina') c[stat] = c.maxSt || 100;
-        else if(stat === 'lust') c[stat] = c.maxLust || 100;
+        else if(stat === 'lust') c[stat] = 0;
+        else if(stat === 'energy') c[stat] = c.maxEn || 30;
         else c[stat] = 0;
     }
 
     c[stat] += delta;
     
-    // Fallback if delta was somehow NaN
     if(isNaN(c[stat])) {
         if(stat === 'hp') c[stat] = c.maxHp || 100;
         else if(stat === 'stamina') c[stat] = c.maxSt || 100;
-        else if(stat === 'lust') c[stat] = c.maxLust || 100;
+        else if(stat === 'lust') c[stat] = 0;
+        else if(stat === 'energy') c[stat] = c.maxEn || 30;
         else c[stat] = 0;
     }
 
@@ -2226,16 +2853,17 @@ window.adjustCombatStat = function(cid, stat, delta) {
     if(stat === 'hp' && c[stat] > c.maxHp) c[stat] = c.maxHp;
     if(stat === 'stamina' && c[stat] > c.maxSt) c[stat] = c.maxSt;
     if(stat === 'lust' && c[stat] > c.maxLust) c[stat] = c.maxLust;
+    if(stat === 'energy' && c[stat] > c.maxEn) c[stat] = c.maxEn;
     
     let ref = null;
     let col = '';
     let arr = null;
     let storageKey = '';
     
-    if (c.isMonster) {
+    if (c.isMonster && c.refId) {
         ref = monsters.find(m => m.id === c.refId);
         col = 'monsters'; arr = monsters; storageKey = 'bd_monsters';
-    } else {
+    } else if (c.refId) {
         ref = characters.find(ch => ch.id === c.refId);
         col = 'characters'; arr = characters; storageKey = 'bd_characters';
     }
@@ -2248,88 +2876,1997 @@ window.adjustCombatStat = function(cid, stat, delta) {
     renderRPG();
 };
 
-function renderRPG() {
-    document.getElementById('rpg-round-counter').innerText = Math.floor((combatState.round - 1) / Math.max(1, combatState.combatants.length)) + 1;
+window.appendCombatLog = function(msg, type = 'info') {
+    const logEl = document.getElementById('combat-action-log');
+    if (!logEl) return;
     
-    const listEl = document.getElementById('combat-tracker-list');
-    listEl.innerHTML = '';
+    const emptyNotice = logEl.querySelector('.italic');
+    if (emptyNotice) emptyNotice.remove();
     
-    if(combatState.combatants.length === 0) {
-        listEl.innerHTML = '<div class="text-center text-gray-500 py-10 glass-panel rounded-lg">Nenhum combatente na mesa. Adicione personagens ou monstros para começar.</div>';
+    const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    let badgeClass = 'text-gray-300 border-white/5 bg-white/5';
+    if (type === 'attack') badgeClass = 'text-red-300 bg-red-950/30 border-red-500/30';
+    else if (type === 'picto') badgeClass = 'text-cyan-300 bg-cyan-950/30 border-cyan-500/30';
+    else if (type === 'parry') badgeClass = 'text-purple-300 bg-amber-950/30 border-amber-500/30';
+    else if (type === 'dodge') badgeClass = 'text-emerald-300 bg-emerald-950/30 border-emerald-500/30';
+    else if (type === 'stagger') badgeClass = 'text-yellow-200 bg-red-900/60 border-red-500 font-bold shadow-lg';
+    else if (type === 'recover') badgeClass = 'text-blue-300 bg-blue-950/30 border-blue-500/30';
+
+    const item = document.createElement('div');
+    item.className = `p-2 rounded border transition text-xs ${badgeClass}`;
+    item.innerHTML = `<span class="text-gray-500 font-mono text-[10px] mr-2">[${time}]</span> ${msg}`;
+    logEl.insertBefore(item, logEl.firstChild);
+};
+
+window.clearCombatLog = function() {
+    const logEl = document.getElementById('combat-action-log');
+    if (logEl) {
+        logEl.innerHTML = '<div class="text-gray-500 italic py-2">Registro de combate limpo.</div>';
+    }
+};
+
+window.selectCombatTarget = function(cid) {
+    if (combatState.selectedTargetCid === cid) {
+        combatState.selectedTargetCid = null;
+    } else {
+        combatState.selectedTargetCid = cid;
+    }
+    renderRPG();
+    if (combatState.selectedTargetCid) {
+        const t = combatState.combatants.find(x => x.cid === cid);
+        if (t) appendCombatLog(`🎯 <strong>${escapeHTML(t.name)}</strong> selecionado como alvo principal!`, 'info');
+    }
+};
+
+window.isFlyingCreature = function(c) {
+    if (!c) return false;
+    if (c.isFlying === true) return true;
+    
+    // Check monster source ref if exists
+    if (c.isMonster && c.refId) {
+        const m = monsters.find(x => x.id === c.refId);
+        if (m) {
+            if (m.isFlying === true) return true;
+            const text = `${m.name || ''} ${m.type || ''} ${m.desc || ''}`.toLowerCase();
+            if (text.includes('voador') || text.includes('voadora') || text.includes('alado') || text.includes('alada') || text.includes('voo') || text.includes('asas') || text.includes('flying')) {
+                return true;
+            }
+        }
+    }
+    
+    // Check combatant fields
+    const cText = `${c.name || ''} ${c.type || ''}`.toLowerCase();
+    if (cText.includes('voador') || cText.includes('voadora') || cText.includes('alado') || cText.includes('alada') || cText.includes('voo') || cText.includes('asas') || cText.includes('flying')) {
+        return true;
+    }
+
+    return false;
+};
+
+window.currentIncomingAttack = null;
+
+window.triggerIncomingAttack = function(attacker, target, hitTotal, hpDmg, postureDmg, actionName = 'Golpe', dmgType = 'HP') {
+    const finalHpDmg = Math.max(1, hpDmg || 5);
+    const finalPostureDmg = Math.max(1, postureDmg || 2);
+
+    // REGRA ESPECÍFICA: Criaturas não podem aparar nem desviar, exceto voadoras que tentam desviar com vantagem automaticamente.
+    if (target && target.isMonster) {
+        const isFlying = window.isFlyingCreature(target);
+        if (isFlying) {
+            // Criatura Voadora: tenta desviar com vantagem automaticamente! (2d20, pega o maior)
+            const d1 = Math.floor(Math.random() * 20) + 1;
+            const d2 = Math.floor(Math.random() * 20) + 1;
+            const bestRoll = Math.max(d1, d2);
+            
+            let defMon = target.refId ? monsters.find(m => m.id === target.refId) : null;
+            let defAgi = defMon?.agi ?? target.attr?.agi ?? 2;
+            let dodgeBonus = (defAgi * 2) + 2;
+            let totalDodge = bestRoll + dodgeBonus;
+            let dc = hitTotal;
+
+            if (target.stamina >= 1) {
+                adjustCombatStat(target.cid, 'stamina', -1);
+            }
+
+            if (totalDodge >= dc) {
+                // Sucesso da esquiva aérea
+                appendCombatLog(`🦅💨 <strong>ESQUIVA AÉREA AUTOMÁTICA (COM VANTAGEM)!</strong> <strong>${escapeHTML(target.name)}</strong> (Criatura Voadora) realizou manobras evasivas no ar e desviou do ataque de <strong>${escapeHTML(attacker.name)}</strong>!<br>• Rolagem com Vantagem: <strong class="text-emerald-400 font-mono">${totalDodge}</strong> [d20s: ${d1}, ${d2} → Maior: ${bestRoll} + 2xAGI+2: +${dodgeBonus}] vs Acerto: <strong>${dc}</strong>.<br>• Nenhum dano sofrido! (-1 PA)`, 'dodge');
+                return;
+            } else {
+                // Falha da esquiva aérea
+                adjustCombatStat(target.cid, 'hp', -finalHpDmg);
+                adjustCombatStat(target.cid, 'lust', finalPostureDmg);
+                appendCombatLog(`❌ <strong>FALHA NA ESQUIVA AÉREA!</strong> <strong>${escapeHTML(target.name)}</strong> (Criatura Voadora) tentou esquivar em voo com vantagem mas foi atingida pelo ataque de <strong>${escapeHTML(attacker.name)}</strong>!<br>• Esquiva com Vantagem: <strong class="text-red-400 font-mono">${totalDodge}</strong> [d20s: ${d1}, ${d2} → Maior: ${bestRoll} + ${dodgeBonus}] vs Acerto: <strong>${dc}</strong>.<br>• Dano Sofrido: <strong class="text-red-400">${finalHpDmg} HP</strong> e <strong class="text-purple-300">+${finalPostureDmg} Postura</strong>. (-1 PA)`, 'attack');
+                if (target.lust >= target.maxLust) {
+                    appendCombatLog(`💥 <strong>GUARDA QUEBRADA!</strong> <strong>${escapeHTML(target.name)}</strong> atingiu 100% de Postura e entrou em <strong>STAGGER</strong>!`, 'stagger');
+                }
+                return;
+            }
+        } else {
+            // Criatura terrestre (não-voadora): não pode aparar nem desviar!
+            adjustCombatStat(target.cid, 'hp', -finalHpDmg);
+            adjustCombatStat(target.cid, 'lust', finalPostureDmg);
+            appendCombatLog(`🐾 <strong>${escapeHTML(target.name)}</strong> sofreu o impacto total de <strong>${escapeHTML(attacker.name)}</strong>!<br>• Dano Sofrido: <strong class="text-red-400">${finalHpDmg} HP</strong> e <strong class="text-purple-300">+${finalPostureDmg} Postura</strong>.<br><span class="text-gray-400 text-[10px]"><em>(Criaturas terrestres não podem aparar nem desviar).</em></span>`, 'attack');
+            if (target.lust >= target.maxLust) {
+                appendCombatLog(`💥 <strong>GUARDA QUEBRADA!</strong> <strong>${escapeHTML(target.name)}</strong> atingiu 100% de Postura e entrou em <strong>STAGGER</strong>!`, 'stagger');
+            }
+            return;
+        }
+    }
+
+    // Alvo é um Jogador / Aliado: abre o Modal de Reação Interativa (Expedition 33)
+    window.currentIncomingAttack = {
+        attackerCid: attacker.cid,
+        attackerName: attacker.name,
+        attackerAvatar: attacker.avatar || '',
+        isMonster: !!attacker.isMonster,
+        targetCid: target.cid,
+        targetName: target.name,
+        actionName: actionName,
+        hitTotal: hitTotal,
+        hpDmg: finalHpDmg,
+        postureDmg: finalPostureDmg,
+        dmgType: dmgType
+    };
+
+    const modal = document.getElementById('modal-incoming-attack');
+    if (!modal) return;
+
+    // Populate attacker card
+    const avEl = document.getElementById('inc-atk-avatar');
+    if (avEl) {
+        if (attacker.avatar) {
+            avEl.innerHTML = `<img src="${attacker.avatar}" class="w-full h-full object-cover">`;
+        } else {
+            avEl.innerHTML = `<i class="fa-solid ${attacker.isMonster ? 'fa-ghost' : 'fa-user-ninja'}"></i>`;
+        }
+    }
+    const nameEl = document.getElementById('inc-atk-name');
+    if (nameEl) nameEl.textContent = attacker.name;
+
+    const actEl = document.getElementById('inc-atk-action');
+    if (actEl) actEl.textContent = actionName;
+
+    const rollEl = document.getElementById('inc-atk-roll');
+    if (rollEl) rollEl.textContent = hitTotal;
+
+    const dmgEl = document.getElementById('inc-atk-dmg');
+    if (dmgEl) dmgEl.textContent = `${window.currentIncomingAttack.hpDmg} HP`;
+
+    const postEl = document.getElementById('inc-atk-posture');
+    if (postEl) postEl.textContent = `+${window.currentIncomingAttack.postureDmg} Postura`;
+
+    // Populate defender card
+    const defNameEl = document.getElementById('inc-def-name');
+    if (defNameEl) defNameEl.textContent = target.name;
+
+    const defStEl = document.getElementById('inc-def-stamina');
+    if (defStEl) defStEl.textContent = `${target.stamina || 0} PA`;
+
+    // Reset reaction result & rhythm arena
+    const resEl = document.getElementById('inc-reaction-result');
+    if (resEl) {
+        resEl.classList.add('hidden');
+        resEl.innerHTML = '';
+    }
+    const actionsEl = document.getElementById('inc-defense-actions');
+    const rhythmEl = document.getElementById('inc-e33-rhythm-container');
+    if (actionsEl) actionsEl.classList.remove('hidden');
+    if (rhythmEl) rhythmEl.classList.add('hidden');
+
+    // Enable reaction buttons inside modal
+    modal.querySelectorAll('button').forEach(btn => {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'pointer-events-none');
+    });
+
+    modal.showModal();
+};
+
+window.closeIncomingAttackModal = function() {
+    if (window.e33RhythmState && window.e33RhythmState.animationFrameId) {
+        cancelAnimationFrame(window.e33RhythmState.animationFrameId);
+    }
+    window.e33RhythmState = null;
+
+    const modal = document.getElementById('modal-incoming-attack');
+    if (modal && modal.open) {
+        modal.close();
+    }
+    const attackerCid = window.currentIncomingAttack ? window.currentIncomingAttack.attackerCid : null;
+    window.currentIncomingAttack = null;
+    if (attackerCid) {
+        window.advanceTurnForCombatant(attackerCid);
+    }
+};
+
+// Database of distinct rhythms and event patterns for each ability in Clair Obscur: Expedition 33
+const EXPEDITION_SKILL_RHYTHMS = {
+    'ataque físico': {
+        name: 'Ataque Físico',
+        type: 'Corte Ágil',
+        tempo: 'Moderato (950ms)',
+        beats: [950],
+        totalDuration: 1300,
+        desc: 'Golpe clássico de lâmina fluida.'
+    },
+    'mira livre (atirar)': {
+        name: 'Mira Livre (Atirar)',
+        type: 'Projétil em Voo',
+        tempo: 'Trajetória Rápida (850ms)',
+        beats: [850],
+        totalDuration: 1200,
+        desc: 'Projétil em aproximação balística veloz.'
+    },
+    'golpe rompe-postura': {
+        name: 'Golpe Rompe-Postura',
+        type: 'Impacto Pesado',
+        tempo: 'Largo / Impacto Tardio (1450ms)',
+        beats: [1450],
+        totalDuration: 1850,
+        desc: 'Golpe com peso maciço telegrafado, exigindo paciência no timing.'
+    },
+    'impacto esmaecido': {
+        name: 'Impacto Esmaecido',
+        type: 'Pulso de Chroma',
+        tempo: 'Condensação de Tinta (1100ms)',
+        beats: [1100],
+        totalDuration: 1500,
+        desc: 'Massa de tinta mística que condensa e detona subitamente.'
+    },
+    'tormenta de golpes': {
+        name: 'Tormenta de Golpes',
+        type: 'Sequência Tripla (3 Golpes)',
+        tempo: 'Allegro Rítmico (650ms, 1200ms, 1750ms)',
+        beats: [650, 1200, 1750],
+        totalDuration: 2200,
+        desc: 'Sequência contínua de 3 estocadas: reaja a cada batida!'
+    },
+    'investida com garras': {
+        name: 'Investida com Garras',
+        type: 'Salto Predatório',
+        tempo: 'Arrancada Feral (800ms)',
+        beats: [800],
+        totalDuration: 1150,
+        desc: 'Investida feroz de garras no solo.'
+    },
+    'mergulho alado': {
+        name: 'Mergulho Alado',
+        type: 'Rasante Aéreo',
+        tempo: 'Queda Rápida (750ms)',
+        beats: [750],
+        totalDuration: 1100,
+        desc: 'Manobra aérea descendente em mergulho rápido.'
+    },
+    'esmagamento monolítico': {
+        name: 'Esmagamento Monolítico',
+        type: 'Onda de Choque',
+        tempo: 'Pisotão Pesado (1600ms)',
+        beats: [1600],
+        totalDuration: 2000,
+        desc: 'Tremor com impacto pesado tardio.'
+    }
+};
+
+window.getSkillRhythmProfile = function(actionName) {
+    if (!actionName) return EXPEDITION_SKILL_RHYTHMS['ataque físico'];
+    const key = actionName.toLowerCase().trim();
+    if (EXPEDITION_SKILL_RHYTHMS[key]) return EXPEDITION_SKILL_RHYTHMS[key];
+
+    for (const k in EXPEDITION_SKILL_RHYTHMS) {
+        if (key.includes(k) || k.includes(key)) return EXPEDITION_SKILL_RHYTHMS[k];
+    }
+
+    if (key.includes('pesad') || key.includes('brut') || key.includes('tit') || key.includes('smash') || key.includes('esmag') || key.includes('ruptura')) {
+        return {
+            name: actionName,
+            type: 'Impacto Pesado',
+            tempo: 'Cadência Lenta (1450ms)',
+            beats: [1450],
+            totalDuration: 1850,
+            desc: 'Ataque pesado com telegrafia demorada e impacto tardio.'
+        };
+    }
+    if (key.includes('frenes') || key.includes('torment') || key.includes('sequ') || key.includes('combo') || key.includes('fur')) {
+        return {
+            name: actionName,
+            type: 'Sequência Múltipla',
+            tempo: 'Cadência Tripla (700ms, 1250ms, 1800ms)',
+            beats: [700, 1250, 1800],
+            totalDuration: 2200,
+            desc: 'Sequência rápida de golpes em cadeia.'
+        };
+    }
+    if (key.includes('tiro') || key.includes('dispar') || key.includes('flech') || key.includes('mira') || key.includes('proj')) {
+        return {
+            name: actionName,
+            type: 'Projétil em Voo',
+            tempo: 'Disparo Rápido (850ms)',
+            beats: [850],
+            totalDuration: 1200,
+            desc: 'Projétil cruzando a distância de combate.'
+        };
+    }
+
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) & 0xffffff;
+    const duration = 850 + (hash % 500);
+    return {
+        name: actionName,
+        type: 'Golpe Declarado',
+        tempo: `Ritmo Distinto (${duration}ms)`,
+        beats: [duration],
+        totalDuration: duration + 350,
+        desc: 'Golpe característico da criatura.'
+    };
+};
+
+window.e33RhythmState = null;
+
+window.startE33RhythmEvent = function(defenseType) {
+    if (!window.currentIncomingAttack) return;
+    const target = combatState.combatants.find(c => c.cid === window.currentIncomingAttack.targetCid);
+    if (!target) return;
+
+    if (target.isMonster) {
+        if (defenseType === 'parry') {
+            alert("Criaturas não podem aparar!");
+            return;
+        }
+        if (defenseType === 'dodge' && !window.isFlyingCreature(target)) {
+            alert("Criaturas terrestres não podem desviar!");
+            return;
+        }
+    }
+
+    const actionsEl = document.getElementById('inc-defense-actions');
+    const rhythmEl = document.getElementById('inc-e33-rhythm-container');
+    const resEl = document.getElementById('inc-reaction-result');
+    if (resEl) resEl.classList.add('hidden');
+    if (actionsEl) actionsEl.classList.add('hidden');
+    if (rhythmEl) rhythmEl.classList.remove('hidden');
+
+    const profile = window.getSkillRhythmProfile(window.currentIncomingAttack.actionName);
+
+    let defChar = !target.isMonster && target.refId ? characters.find(ch => ch.id === target.refId) : null;
+    let defMon = target.isMonster && target.refId ? monsters.find(m => m.id === target.refId) : null;
+    let defAgi = defChar?.attr?.agi ?? defMon?.agi ?? target.attr?.agi ?? 0;
+    let defPer = defChar?.attr?.per ?? defChar?.attr?.sed ?? defChar?.attr?.von ?? defMon?.sed ?? defMon?.per ?? target.attr?.per ?? 0;
+
+    const keyEl = document.getElementById('rhythm-mode-key');
+    const titleEl = document.getElementById('rhythm-event-title');
+    const tempoEl = document.getElementById('rhythm-event-tempo');
+    const badgeEl = document.getElementById('rhythm-mode-badge');
+    const triggerBtn = document.getElementById('btn-e33-rhythm-trigger');
+
+    if (keyEl) keyEl.textContent = defenseType === 'dodge' ? 'Q' : 'E';
+    if (titleEl) titleEl.textContent = `${defenseType === 'dodge' ? 'Desvio' : 'Aparo'}: ${profile.name}`;
+    if (tempoEl) tempoEl.textContent = `Cadência: ${profile.tempo} • ${profile.type}`;
+    if (badgeEl) {
+        if (defenseType === 'dodge') {
+            badgeEl.textContent = 'Redução 0% a 100%';
+            badgeEl.className = 'text-[9px] uppercase tracking-wider px-2 py-0.5 rounded font-mono font-bold bg-black border border-stone-700 text-stone-300';
+        } else {
+            badgeEl.textContent = 'Aparo Requer 100%';
+            badgeEl.className = 'text-[9px] uppercase tracking-wider px-2 py-0.5 rounded font-mono font-bold bg-black border border-[#bfa888]/50 text-[#bfa888]';
+        }
+    }
+
+    if (triggerBtn) {
+        triggerBtn.disabled = false;
+        triggerBtn.className = "w-full py-3 bg-[#111111] hover:bg-[#181818] active:scale-[0.98] border border-stone-700 hover:border-stone-500 text-[#ede3d2] font-cinzel font-bold text-xs uppercase tracking-[0.2em] rounded-lg shadow-md flex items-center justify-center gap-2 cursor-pointer transition select-none";
+        triggerBtn.innerHTML = `<span class="e33-key text-[10px]">Espaço</span> REAGIR NA CONVERGÊNCIA (${defenseType === 'dodge' ? 'DESVIAR' : 'APARAR'})`;
+    }
+
+    const beatsContainer = document.getElementById('rhythm-beats-container');
+    if (beatsContainer) {
+        beatsContainer.innerHTML = '';
+        profile.beats.forEach((b, idx) => {
+            const chip = document.createElement('div');
+            chip.id = `beat-chip-${idx}`;
+            chip.className = `e33-beat-chip ${idx === 0 ? 'active' : ''}`;
+            chip.innerHTML = `<span>Batida ${idx + 1}</span> <span class="chip-val font-bold">◇</span>`;
+            beatsContainer.appendChild(chip);
+        });
+    }
+
+    const canvas = document.getElementById('e33-rhythm-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    const perfectWindow = defenseType === 'parry' ? Math.min(80, 55 + (defPer * 5)) : Math.min(90, 60 + (defAgi * 5));
+
+    window.e33RhythmState = {
+        active: true,
+        defenseType: defenseType,
+        profile: profile,
+        perfectWindow: perfectWindow,
+        startTime: performance.now(),
+        currentBeatIdx: 0,
+        beatResults: [],
+        flashBeatTime: 0,
+        flashAccuracy: 0,
+        animationFrameId: null
+    };
+
+    const targetRadius = 36;
+    const maxRadius = 110;
+
+    function renderFrame(now) {
+        if (!window.e33RhythmState || !window.e33RhythmState.active) return;
+        const state = window.e33RhythmState;
+        const elapsed = now - state.startTime;
+
+        if (state.currentBeatIdx < state.profile.beats.length) {
+            const currentBeatTarget = state.profile.beats[state.currentBeatIdx];
+            if (elapsed > currentBeatTarget + 260) {
+                state.beatResults.push({ beat: state.currentBeatIdx + 1, accuracy: 0, delta: 999 });
+                const chip = document.getElementById(`beat-chip-${state.currentBeatIdx}`);
+                if (chip) {
+                    chip.className = 'e33-beat-chip miss';
+                    const val = chip.querySelector('.chip-val');
+                    if (val) val.textContent = '✕ 0%';
+                }
+                state.currentBeatIdx++;
+                if (state.currentBeatIdx < state.profile.beats.length) {
+                    const nextChip = document.getElementById(`beat-chip-${state.currentBeatIdx}`);
+                    if (nextChip) nextChip.classList.add('active');
+                }
+            }
+        }
+
+        if (state.currentBeatIdx >= state.profile.beats.length) {
+            window.finishE33RhythmEvent();
+            return;
+        }
+
+        const width = canvas.width;
+        const height = canvas.height;
+        const cx = width / 2;
+        const cy = height / 2;
+
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.strokeStyle = 'rgba(237, 227, 210, 0.08)';
+        ctx.lineWidth = 1;
+
+        ctx.beginPath();
+        ctx.moveTo(cx - 130, cy);
+        ctx.lineTo(cx + 130, cy);
+        ctx.moveTo(cx, cy - 85);
+        ctx.lineTo(cx, cy + 85);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, 75, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#bfa888';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, targetRadius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        const notchLen = 6;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - targetRadius - notchLen); ctx.lineTo(cx, cy - targetRadius + 2);
+        ctx.moveTo(cx, cy + targetRadius + notchLen); ctx.lineTo(cx, cy + targetRadius - 2);
+        ctx.moveTo(cx - targetRadius - notchLen, cy); ctx.lineTo(cx - targetRadius + 2, cy);
+        ctx.moveTo(cx + targetRadius + notchLen, cy); ctx.lineTo(cx + targetRadius - 2, cy);
+        ctx.stroke();
+
+        ctx.fillStyle = '#ede3d2';
+        ctx.font = 'bold 16px "Cinzel", serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(state.defenseType === 'dodge' ? 'Q' : 'E', cx, cy - 2);
+
+        ctx.fillStyle = '#bfa888';
+        ctx.font = '8px sans-serif';
+        ctx.fillText('◆', cx, cy + 14);
+
+        const beatTargetTime = state.profile.beats[state.currentBeatIdx];
+        const leadInTime = 800;
+        const ringStartTime = Math.max(0, beatTargetTime - leadInTime);
+
+        if (elapsed >= ringStartTime) {
+            const timeDiff = elapsed - ringStartTime;
+            const progress = Math.min(1.0, timeDiff / leadInTime);
+            
+            let curRadius;
+            if (elapsed <= beatTargetTime) {
+                curRadius = maxRadius - ((maxRadius - targetRadius) * progress);
+            } else {
+                const postProgress = Math.min(1.0, (elapsed - beatTargetTime) / 250);
+                curRadius = targetRadius - (targetRadius * postProgress);
+            }
+
+            if (curRadius > 0) {
+                const distToTarget = Math.abs(curRadius - targetRadius);
+                const isConvergingNow = distToTarget <= 4;
+
+                ctx.strokeStyle = isConvergingNow ? '#ffffff' : (distToTarget <= 12 ? '#bfa888' : '#ede3d2');
+                ctx.lineWidth = isConvergingNow ? 2.5 : 1.5;
+                ctx.beginPath();
+                ctx.arc(cx, cy, curRadius, 0, Math.PI * 2);
+                ctx.stroke();
+
+                const pipAngle = (elapsed / 400) % (Math.PI * 2);
+                const px1 = cx + Math.cos(pipAngle) * curRadius;
+                const py1 = cy + Math.sin(pipAngle) * curRadius;
+                const px2 = cx + Math.cos(pipAngle + Math.PI) * curRadius;
+                const py2 = cy + Math.sin(pipAngle + Math.PI) * curRadius;
+
+                ctx.fillStyle = ctx.strokeStyle;
+                ctx.beginPath();
+                ctx.arc(px1, py1, 2, 0, Math.PI * 2);
+                ctx.arc(px2, py2, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        for (let b = state.currentBeatIdx + 1; b < state.profile.beats.length; b++) {
+            const futureBeat = state.profile.beats[b];
+            const futureStart = futureBeat - leadInTime;
+            if (elapsed >= futureStart) {
+                const fProgress = Math.min(1.0, (elapsed - futureStart) / leadInTime);
+                const fRadius = maxRadius - ((maxRadius - targetRadius) * fProgress);
+                ctx.strokeStyle = 'rgba(197, 160, 89, 0.25)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.arc(cx, cy, Math.max(targetRadius + 10, fRadius), 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+        if (state.flashBeatTime && (now - state.flashBeatTime < 140)) {
+            const flashAge = (now - state.flashBeatTime) / 140;
+            const flashR = targetRadius + (flashAge * 14);
+            ctx.strokeStyle = state.flashAccuracy === 100 ? '#ffffff' : (state.flashAccuracy > 0 ? '#bfa888' : '#7f1d1d');
+            ctx.lineWidth = 2 * (1 - flashAge);
+            ctx.beginPath();
+            ctx.arc(cx, cy, flashR, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = '#8c734b';
+        ctx.font = '10px "Inter", monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(`BATIDA ${state.currentBeatIdx + 1}/${state.profile.beats.length}`, 14, 20);
+
+        ctx.textAlign = 'right';
+        ctx.fillText(state.profile.tempo, width - 14, 20);
+
+        state.animationFrameId = requestAnimationFrame(renderFrame);
+    }
+
+    state.animationFrameId = requestAnimationFrame(renderFrame);
+};
+
+window.recordE33RhythmBeat = function() {
+    if (!window.e33RhythmState || !window.e33RhythmState.active) return;
+    const state = window.e33RhythmState;
+    if (state.currentBeatIdx >= state.profile.beats.length) return;
+
+    const now = performance.now();
+    const elapsed = now - state.startTime;
+    const targetBeatTime = state.profile.beats[state.currentBeatIdx];
+    const delta = Math.abs(elapsed - targetBeatTime);
+
+    let accuracy = 0;
+    if (delta <= state.perfectWindow) {
+        accuracy = 100;
+    } else if (delta <= 160) {
+        const ratio = (delta - state.perfectWindow) / (160 - state.perfectWindow);
+        accuracy = Math.round(92 - (ratio * 30));
+    } else if (delta <= 280) {
+        const ratio = (delta - 160) / (280 - 160);
+        accuracy = Math.round(55 - (ratio * 40));
+    } else {
+        accuracy = 0;
+    }
+
+    state.beatResults.push({
+        beat: state.currentBeatIdx + 1,
+        accuracy: accuracy,
+        delta: Math.round(delta)
+    });
+
+    state.flashBeatTime = now;
+    state.flashAccuracy = accuracy;
+
+    const chip = document.getElementById(`beat-chip-${state.currentBeatIdx}`);
+    if (chip) {
+        chip.classList.remove('active');
+        if (accuracy === 100) {
+            chip.className = 'e33-beat-chip perfect';
+            const val = chip.querySelector('.chip-val');
+            if (val) val.textContent = '◆ 100%';
+        } else if (accuracy > 0) {
+            chip.className = 'e33-beat-chip';
+            chip.style.borderColor = '#bfa888';
+            const val = chip.querySelector('.chip-val');
+            if (val) val.textContent = `◆ ${accuracy}%`;
+        } else {
+            chip.className = 'e33-beat-chip miss';
+            const val = chip.querySelector('.chip-val');
+            if (val) val.textContent = '✕ 0%';
+        }
+    }
+
+    state.currentBeatIdx++;
+
+    if (state.currentBeatIdx < state.profile.beats.length) {
+        const nextChip = document.getElementById(`beat-chip-${state.currentBeatIdx}`);
+        if (nextChip) nextChip.classList.add('active');
+    } else {
+        window.finishE33RhythmEvent();
+    }
+};
+
+window.finishE33RhythmEvent = function() {
+    if (!window.e33RhythmState || !window.e33RhythmState.active) return;
+    const state = window.e33RhythmState;
+    state.active = false;
+    if (state.animationFrameId) {
+        cancelAnimationFrame(state.animationFrameId);
+        state.animationFrameId = null;
+    }
+
+    const { defenseType, beatResults } = state;
+    if (beatResults.length === 0) {
+        beatResults.push({ beat: 1, accuracy: 0, delta: 999 });
+    }
+
+    const totalAccuracy = beatResults.reduce((sum, b) => sum + b.accuracy, 0);
+    const avgAccuracy = Math.round(totalAccuracy / beatResults.length);
+    const all100 = beatResults.every(b => b.accuracy === 100);
+
+    const triggerBtn = document.getElementById('btn-e33-rhythm-trigger');
+    if (triggerBtn) {
+        triggerBtn.disabled = true;
+        if (defenseType === 'parry') {
+            if (all100) {
+                triggerBtn.innerHTML = `⭐ 100% PERFEIÇÃO! PARRY ATIVADO! ⭐`;
+                triggerBtn.className = "w-full py-3 bg-[#14100a] border border-[#bfa888] text-[#ede3d2] font-cinzel font-bold text-xs uppercase tracking-widest rounded-lg shadow-md";
+            } else {
+                triggerBtn.innerHTML = `❌ ${avgAccuracy}% - PARRY FALHOU (EXIGE 100%)`;
+                triggerBtn.className = "w-full py-3 bg-[#140808] border border-red-900 text-red-200 font-cinzel font-bold text-xs uppercase tracking-widest rounded-lg shadow-md";
+            }
+        } else {
+            if (all100) {
+                triggerBtn.innerHTML = `⭐ 100% REDUÇÃO! DESVIO PERFEITO! ⭐`;
+                triggerBtn.className = "w-full py-3 bg-[#0a1410] border border-emerald-600 text-[#ede3d2] font-cinzel font-bold text-xs uppercase tracking-widest rounded-lg shadow-md";
+            } else if (avgAccuracy > 0) {
+                triggerBtn.innerHTML = `💨 ${avgAccuracy}% DE DANO REDUZIDO!`;
+                triggerBtn.className = "w-full py-3 bg-[#0a0f14] border border-stone-600 text-stone-200 font-cinzel font-bold text-xs uppercase tracking-widest rounded-lg shadow-md";
+            } else {
+                triggerBtn.innerHTML = `❌ 0% REDUÇÃO - IMPACTO TOTAL!`;
+                triggerBtn.className = "w-full py-3 bg-[#140808] border border-red-900 text-red-200 font-cinzel font-bold text-xs uppercase tracking-widest rounded-lg shadow-md";
+            }
+        }
+    }
+
+    const finalAccuracy = defenseType === 'parry' ? (all100 ? 100 : avgAccuracy) : avgAccuracy;
+
+    setTimeout(() => {
+        window.resolveIncomingDefense(defenseType, finalAccuracy);
+    }, 500);
+};
+
+// Aliases for compatibility
+window.startQTE = window.startE33RhythmEvent;
+window.stopQTE = window.recordE33RhythmBeat;
+
+window.resolveIncomingDefense = function(choice, qteAccuracy) {
+    if (!window.currentIncomingAttack) return;
+    const attack = window.currentIncomingAttack;
+    const attacker = combatState.combatants.find(c => c.cid === attack.attackerCid);
+    const target = combatState.combatants.find(c => c.cid === attack.targetCid);
+
+    if (!target) {
+        window.closeIncomingAttackModal();
+        return;
+    }
+
+    const modal = document.getElementById('modal-incoming-attack');
+    const resEl = document.getElementById('inc-reaction-result');
+
+    if (target.isMonster) {
+        if (choice === 'parry') {
+            alert("Criaturas não podem aparar!");
+            if (modal) modal.querySelectorAll('button').forEach(btn => btn.disabled = false);
+            return;
+        }
+        if (choice === 'dodge' && !window.isFlyingCreature(target)) {
+            alert("Criaturas terrestres não podem desviar!");
+            if (modal) modal.querySelectorAll('button').forEach(btn => btn.disabled = false);
+            return;
+        }
+    }
+
+    if (modal) {
+        modal.querySelectorAll('button').forEach(btn => {
+            btn.disabled = true;
+            btn.classList.add('opacity-50', 'pointer-events-none');
+        });
+    }
+
+    let defChar = !target.isMonster && target.refId ? characters.find(ch => ch.id === target.refId) : null;
+    let defMon = target.isMonster && target.refId ? monsters.find(m => m.id === target.refId) : null;
+
+    let defAgi = defChar?.attr?.agi ?? defMon?.agi ?? target.attr?.agi ?? 0;
+    let defPer = defChar?.attr?.per ?? defChar?.attr?.sed ?? defChar?.attr?.von ?? defMon?.sed ?? defMon?.per ?? target.attr?.per ?? 0;
+    let defFor = defChar?.attr?.for ?? defMon?.for ?? target.attr?.for ?? 0;
+    let defCon = defChar?.attr?.con ?? defChar?.attr?.vit ?? defMon?.con ?? target.attr?.con ?? 0;
+
+    let resultHtml = '';
+    let autoCloseDelay = 1800;
+
+    if (choice === 'dodge') {
+        let hasPA = target.stamina >= 1;
+        if (hasPA) {
+            adjustCombatStat(target.cid, 'stamina', -1);
+        }
+
+        const accuracy = typeof qteAccuracy === 'number' ? qteAccuracy : 0;
+        const pct = accuracy / 100;
+        const hpReduced = Math.round(attack.hpDmg * pct);
+        const postureReduced = Math.round(attack.postureDmg * pct);
+        const finalHpDmg = Math.max(0, attack.hpDmg - hpReduced);
+        const finalPostureDmg = Math.max(0, attack.postureDmg - postureReduced);
+
+        if (finalHpDmg > 0) adjustCombatStat(target.cid, 'hp', -finalHpDmg);
+        if (finalPostureDmg > 0) adjustCombatStat(target.cid, 'lust', finalPostureDmg);
+
+        if (accuracy === 100) {
+            appendCombatLog(`💨 <strong>DESVIO PERFEITO (100% REDUÇÃO)!</strong> <strong>${escapeHTML(target.name)}</strong> rolou sobre as cinzas no compasso exato de <strong>${escapeHTML(attack.actionName || 'Golpe')}</strong> de <strong>${escapeHTML(attack.attackerName)}</strong>!<br>• Ritmo: <strong class="text-stone-200 font-mono">100% PERFEIÇÃO</strong> &bull; Dano evitado: <strong>100% (${attack.hpDmg} HP / +${attack.postureDmg} Postura)</strong>.<br>• Nenhum dano sofrido! ${hasPA ? '(-1 PA)' : '<em>(Esquiva reativa sem PA)</em>'}`, 'dodge');
+            resultHtml = `
+                <div class="p-3 bg-[#0c140e] border border-stone-600 rounded-lg text-center shadow">
+                    <div class="text-stone-200 font-cinzel font-bold text-sm flex items-center justify-center gap-1.5 mb-1">
+                        <span class="text-[#bfa888]">◆</span> DESVIO PERFEITO (100% REDUÇÃO) <span class="text-[#bfa888]">◆</span>
+                    </div>
+                    <div class="text-xs text-stone-400">Ritmo de Esquiva: <strong class="text-stone-200 font-mono">100% no Compasso</strong></div>
+                    <div class="text-[11px] text-stone-300 font-semibold mt-1">Dano 100% evitado! (0 HP sofrido) ${hasPA ? '(-1 PA)' : ''}</div>
+                </div>
+            `;
+        } else if (accuracy > 0) {
+            appendCombatLog(`💨 <strong>DESVIO PARCIAL (${accuracy}% REDUZIDO)!</strong> <strong>${escapeHTML(target.name)}</strong> esquivou parcialmente da cadência de <strong>${escapeHTML(attack.attackerName)}</strong>!<br>• Ritmo: <strong class="text-stone-300 font-mono">${accuracy}% Precisão</strong> &bull; Dano Mitigado: <strong class="text-stone-200">-${hpReduced} HP</strong> e <strong class="text-stone-200">-${postureReduced} Postura</strong>.<br>• Dano Sofrido: apenas <strong class="text-red-400">${finalHpDmg} HP</strong> e <strong class="text-purple-300">+${finalPostureDmg} Postura</strong>. ${hasPA ? '(-1 PA)' : ''}`, 'dodge');
+            resultHtml = `
+                <div class="p-3 bg-[#0a0e14] border border-stone-700 rounded-lg text-center shadow">
+                    <div class="text-stone-200 font-cinzel font-bold text-sm flex items-center justify-center gap-1.5 mb-1">
+                        DESVIO PARCIAL (${accuracy}% REDUÇÃO)
+                    </div>
+                    <div class="text-xs text-stone-400">Mitigou: <strong class="text-stone-200">-${hpReduced} HP</strong> / <strong class="text-stone-200">-${postureReduced} Postura</strong></div>
+                    <div class="text-[11px] text-stone-300 font-semibold mt-1">Sofreu apenas ${finalHpDmg} HP e +${finalPostureDmg} Postura ${hasPA ? '(-1 PA)' : ''}</div>
+                </div>
+            `;
+            if (target.lust >= target.maxLust) {
+                appendCombatLog(`💥 <strong>GUARDA QUEBRADA!</strong> <strong>${escapeHTML(target.name)}</strong> atingiu 100% de Postura e entrou em <strong>STAGGER</strong>!`, 'stagger');
+            }
+        } else {
+            appendCombatLog(`❌ <strong>FALHA NO DESVIO (0% REDUÇÃO)!</strong> <strong>${escapeHTML(target.name)}</strong> perdeu o ritmo da esquiva e recebeu o impacto pleno de <strong>${escapeHTML(attack.attackerName)}</strong>!<br>• Ritmo: <strong class="text-red-400 font-mono">0% (Fora do compasso)</strong>.<br>• Dano Sofrido: <strong class="text-red-400">${attack.hpDmg} HP</strong> e <strong class="text-purple-300">+${attack.postureDmg} Postura</strong>. ${hasPA ? '(-1 PA)' : ''}`, 'attack');
+            resultHtml = `
+                <div class="p-3 bg-[#140808] border border-red-900 rounded-lg text-center shadow">
+                    <div class="text-red-400 font-cinzel font-bold text-sm flex items-center justify-center gap-1.5 mb-1">
+                        ERROU O RITMO DO DESVIO (0%)
+                    </div>
+                    <div class="text-xs text-stone-400">Dano Pleno: <strong class="text-red-400 font-mono">${attack.hpDmg} HP</strong> e <strong class="text-purple-300 font-mono">+${attack.postureDmg} Postura</strong></div>
+                    <div class="text-[11px] text-stone-400 font-semibold mt-1">Nenhum dano reduzido. ${hasPA ? '(-1 PA)' : ''}</div>
+                </div>
+            `;
+            if (target.lust >= target.maxLust) {
+                appendCombatLog(`💥 <strong>GUARDA QUEBRADA!</strong> <strong>${escapeHTML(target.name)}</strong> atingiu 100% de Postura e entrou em <strong>STAGGER</strong>!`, 'stagger');
+            }
+        }
+    } else if (choice === 'parry') {
+        const accuracy = typeof qteAccuracy === 'number' ? qteAccuracy : 0;
+        const isSuccess = (accuracy === 100);
+
+        if (isSuccess) {
+            const counterPostureDmg = Math.floor(Math.random() * 6) + Math.floor(Math.random() * 6) + 4 + Math.max(defFor, defAgi, 1);
+            const counterHpDmg = Math.floor(Math.random() * 6) + 2 + Math.max(defFor, 1);
+
+            if (attacker) {
+                adjustCombatStat(attacker.cid, 'lust', counterPostureDmg);
+                adjustCombatStat(attacker.cid, 'hp', -counterHpDmg);
+            }
+
+            appendCombatLog(`🛡️⚡ <strong>APARADA PERFEITA! (100% NO PARRY!)</strong> <strong>${escapeHTML(target.name)}</strong> defletiu a cadência de <strong>${escapeHTML(attack.actionName || 'Golpe')}</strong> de <strong>${escapeHTML(attack.attackerName)}</strong> no milissegundo exato!<br>• Ritmo: <strong class="text-[#bfa888] font-mono">100% PERFEIÇÃO</strong> (Aparo Completo!).<br>• <strong>CONTRA-ATAQUE DE POSTURA:</strong> Infligiu <strong class="text-[#bfa888] font-bold">+${counterPostureDmg} Dano de Postura</strong> e <strong class="text-stone-200 font-bold">${counterHpDmg} HP</strong> em <strong>${escapeHTML(attack.attackerName)}</strong>! Dano recebido anulado!`, 'parry');
+
+            resultHtml = `
+                <div class="p-3 bg-[#141008] border border-[#bfa888] rounded-lg text-center shadow">
+                    <div class="text-[#bfa888] font-cinzel font-bold text-sm flex items-center justify-center gap-1.5 mb-1">
+                        ◆ PARRY PERFEITO (100%) &bull; CONTRA-ATAQUE! ◆
+                    </div>
+                    <div class="text-xs text-stone-300">Convergência: <strong class="text-[#bfa888] font-mono">100% EXATOS</strong></div>
+                    <div class="text-[11px] text-[#ede3d2] font-bold mt-1">Dano anulado! Contra-atacou com +${counterPostureDmg} Postura e ${counterHpDmg} HP no atacante!</div>
+                </div>
+            `;
+
+            if (attacker && attacker.lust >= attacker.maxLust) {
+                appendCombatLog(`💥 <strong>QUEBRA DE GUARDA POR PARRY!</strong> <strong>${escapeHTML(attacker.name)}</strong> teve a postura estilhaçada pelo contra-ataque e entrou em <strong>STAGGER TOTAL</strong>!`, 'stagger');
+            }
+        } else {
+            const penHp = attack.hpDmg + 2;
+            const penPosture = attack.postureDmg + 2;
+            adjustCombatStat(target.cid, 'hp', -penHp);
+            adjustCombatStat(target.cid, 'lust', penPosture);
+
+            appendCombatLog(`💥 <strong>FALHA NO PARRY! GUARDA EXPOSTA!</strong> <strong>${escapeHTML(target.name)}</strong> errou a convergência da aparada contra <strong>${escapeHTML(attack.attackerName)}</strong>!<br>• Ritmo: <strong class="text-red-400 font-mono">${accuracy}%</strong> (O Aparar <strong>exige 100%</strong> exatos em todas as batidas!).<br>• Penalidade de Exposição: Sofreu <strong class="text-red-400">${penHp} HP</strong> (+2) e <strong class="text-purple-300">+${penPosture} Postura</strong> (+2).`, 'attack');
+
+            resultHtml = `
+                <div class="p-3 bg-[#140808] border border-red-900 rounded-lg text-center shadow">
+                    <div class="text-red-400 font-cinzel font-bold text-sm flex items-center justify-center gap-1.5 mb-1">
+                        FALHA NO PARRY &bull; GUARDA EXPOSTA
+                    </div>
+                    <div class="text-xs text-stone-400">Precisão: <strong class="text-red-400 font-mono">${accuracy}%</strong> (Exige 100% para funcionar)</div>
+                    <div class="text-[11px] text-red-300 font-semibold mt-1">Penalidade: ${penHp} HP (+2) e +${penPosture} Postura (+2)!</div>
+                </div>
+            `;
+
+            if (target.lust >= target.maxLust) {
+                appendCombatLog(`💥 <strong>GUARDA QUEBRADA!</strong> <strong>${escapeHTML(target.name)}</strong> atingiu 100% de Postura e entrou em <strong>STAGGER</strong>!`, 'stagger');
+            }
+        }
+    } else if (choice === 'block') {
+        const absorbed = Math.max(3, Math.floor((defCon || 2) * 1.5));
+        const finalHp = Math.max(1, attack.hpDmg - absorbed);
+        const finalPosture = attack.postureDmg + Math.floor(absorbed / 2);
+
+        adjustCombatStat(target.cid, 'hp', -finalHp);
+        adjustCombatStat(target.cid, 'lust', finalPosture);
+
+        appendCombatLog(`🛡️ <strong>BLOQUEIO FIRME!</strong> <strong>${escapeHTML(target.name)}</strong> absorveu o impacto de <strong>${escapeHTML(attack.attackerName)}</strong> na guarda.<br>• Absorção: <strong>${absorbed} HP</strong> mitigados | Dano Sofrido: <strong class="text-red-400">${finalHp} HP</strong> e <strong class="text-purple-300">+${finalPosture} Postura</strong>.`, 'parry');
+
+        resultHtml = `
+            <div class="p-3 bg-[#0a0a0a] border border-stone-700 rounded-lg text-center shadow">
+                <div class="text-stone-300 font-cinzel font-bold text-sm flex items-center justify-center gap-1.5 mb-1">
+                    BLOQUEIO FIRME (ABSORÇÃO)
+                </div>
+                <div class="text-xs text-stone-400">${absorbed} HP absorvidos pela guarda.</div>
+                <div class="text-[11px] text-stone-300 font-semibold mt-1">Dano Sofrido: ${finalHp} HP e +${finalPosture} Postura</div>
+            </div>
+        `;
+
+        if (target.lust >= target.maxLust) {
+            appendCombatLog(`💥 <strong>GUARDA QUEBRADA!</strong> <strong>${escapeHTML(target.name)}</strong> atingiu 100% de Postura e entrou em <strong>STAGGER</strong>!`, 'stagger');
+        }
+    } else {
+        adjustCombatStat(target.cid, 'hp', -attack.hpDmg);
+        adjustCombatStat(target.cid, 'lust', attack.postureDmg);
+
+        appendCombatLog(`💥 <strong>${escapeHTML(target.name)}</strong> recebeu o impacto total do ataque de <strong>${escapeHTML(attack.attackerName)}</strong>!<br>• Dano Sofrido: <strong class="text-red-400">${attack.hpDmg} HP</strong> e <strong class="text-purple-300">+${attack.postureDmg} Postura</strong>.`, 'attack');
+
+        resultHtml = `
+            <div class="p-3 bg-[#080808] border border-stone-800 rounded-lg text-center shadow">
+                <div class="text-stone-400 font-cinzel font-bold text-sm mb-1">DANO RECEBIDO</div>
+                <div class="text-[11px] text-stone-500 font-mono">${attack.hpDmg} HP e +${attack.postureDmg} Postura aplicados.</div>
+            </div>
+        `;
+
+        if (target.lust >= target.maxLust) {
+            appendCombatLog(`💥 <strong>GUARDA QUEBRADA!</strong> <strong>${escapeHTML(target.name)}</strong> atingiu 100% de Postura e entrou em <strong>STAGGER</strong>!`, 'stagger');
+        }
+    }
+
+    if (resEl) {
+        resEl.innerHTML = resultHtml;
+        resEl.classList.remove('hidden');
+    }
+
+    const rhythmEl = document.getElementById('inc-e33-rhythm-container');
+    if (rhythmEl) rhythmEl.classList.add('hidden');
+
+    setTimeout(() => {
+        window.closeIncomingAttackModal();
+    }, autoCloseDelay);
+};
+
+window.quickCombatShoot = function(cid) {
+    const c = combatState.combatants.find(x => x.cid === cid);
+    if (!c) return;
+    if (c.stamina < 1) {
+        alert(`${c.name} não possui Fôlego/PA suficiente para disparar! (Requer 1 PA)`);
         return;
     }
     
-    combatState.combatants.forEach((c, idx) => {
-        const isTurn = idx === 0;
-        const div = document.createElement('div');
-        div.className = `glass-panel p-4 rounded-lg flex flex-col md:flex-row items-center gap-4 border-2 transition-all ${isTurn ? 'border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'border-transparent opacity-80'}`;
-        
-        div.innerHTML = `
-            <div class="flex items-center gap-4 min-w-[200px]">
-                <div class="font-bold text-xl text-purple-400 w-8 text-center">${c.ini}</div>
-                ${c.avatar ? `<img src="${escapeHTML(c.avatar)}" class="w-12 h-12 rounded-full border border-gold object-cover">` : `<div class="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center border border-gold"><i class="fa-solid ${c.isMonster ? 'fa-ghost' : 'fa-user'}"></i></div>`}
-                <div>
-                    <div class="font-bold text-white">${escapeHTML(c.name)}</div>
-                    <div class="text-xs text-gray-400">${c.isMonster ? 'Monstro' : 'Personagem'}</div>
-                </div>
-            </div>
-            
-            <div class="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 w-full">
-                <!-- HP -->
-                <div class="flex flex-col gap-1">
-                    <div class="flex justify-between text-xs font-bold text-gray-300">
-                        <span>HP</span><span>${c.hp} / ${c.maxHp}</span>
-                    </div>
-                    <div class="flex items-center gap-1">
-                        <button class="btn-icon bg-red-900/50 text-red-300 px-2 py-1 rounded hover:bg-red-900" onclick="adjustCombatStat('${c.cid}', 'hp', -5)">-5</button>
-                        <button class="btn-icon bg-red-900/50 text-red-300 px-2 py-1 rounded hover:bg-red-900" onclick="adjustCombatStat('${c.cid}', 'hp', -1)">-1</button>
-                        <div class="flex-1 h-3 bg-gray-800 rounded overflow-hidden shadow-inner relative">
-                            <div class="h-full bg-red-500 transition-all duration-300" style="width: ${(c.hp/c.maxHp)*100}%"></div>
-                        </div>
-                        <button class="btn-icon bg-green-900/50 text-green-300 px-2 py-1 rounded hover:bg-green-900" onclick="adjustCombatStat('${c.cid}', 'hp', 1)">+1</button>
-                        <button class="btn-icon bg-green-900/50 text-green-300 px-2 py-1 rounded hover:bg-green-900" onclick="adjustCombatStat('${c.cid}', 'hp', 5)">+5</button>
-                    </div>
-                </div>
-                
-                <!-- Stamina -->
-                <div class="flex flex-col gap-1">
-                    <div class="flex justify-between text-xs font-bold text-gray-300">
-                        <span>Stamina</span><span>${c.stamina} / ${c.maxSt}</span>
-                    </div>
-                    <div class="flex items-center gap-1">
-                        <button class="btn-icon bg-blue-900/50 text-blue-300 px-2 py-1 rounded hover:bg-blue-900" onclick="adjustCombatStat('${c.cid}', 'stamina', -5)">-5</button>
-                        <button class="btn-icon bg-blue-900/50 text-blue-300 px-2 py-1 rounded hover:bg-blue-900" onclick="adjustCombatStat('${c.cid}', 'stamina', -1)">-1</button>
-                        <div class="flex-1 h-3 bg-gray-800 rounded overflow-hidden shadow-inner relative">
-                            <div class="h-full bg-blue-400 transition-all duration-300" style="width: ${(c.stamina/c.maxSt)*100}%"></div>
-                        </div>
-                        <button class="btn-icon bg-blue-900/50 text-blue-300 px-2 py-1 rounded hover:bg-blue-900" onclick="adjustCombatStat('${c.cid}', 'stamina', 1)">+1</button>
-                        <button class="btn-icon bg-blue-900/50 text-blue-300 px-2 py-1 rounded hover:bg-blue-900" onclick="adjustCombatStat('${c.cid}', 'stamina', 5)">+5</button>
-                    </div>
-                </div>
-                
-                <!-- Lust -->
-                <div class="flex flex-col gap-1">
-                    <div class="flex justify-between text-xs font-bold text-gray-300">
-                        <span>Lust</span><span>${c.lust} / ${c.maxLust}</span>
-                    </div>
-                    <div class="flex items-center gap-1">
-                        <button class="btn-icon bg-pink-900/50 text-pink-300 px-2 py-1 rounded hover:bg-pink-900" onclick="adjustCombatStat('${c.cid}', 'lust', -5)">-5</button>
-                        <button class="btn-icon bg-pink-900/50 text-pink-300 px-2 py-1 rounded hover:bg-pink-900" onclick="adjustCombatStat('${c.cid}', 'lust', -1)">-1</button>
-                        <div class="flex-1 h-3 bg-gray-800 rounded overflow-hidden shadow-inner relative">
-                            <div class="h-full bg-pink-500 transition-all duration-300" style="width: ${(c.lust/c.maxLust)*100}%"></div>
-                        </div>
-                        <button class="btn-icon bg-pink-900/50 text-pink-300 px-2 py-1 rounded hover:bg-pink-900" onclick="adjustCombatStat('${c.cid}', 'lust', 1)">+1</button>
-                        <button class="btn-icon bg-pink-900/50 text-pink-300 px-2 py-1 rounded hover:bg-pink-900" onclick="adjustCombatStat('${c.cid}', 'lust', 5)">+5</button>
-                    </div>
-                </div>
-            </div>
-            <button class="text-gray-500 hover:text-red-400 ml-0 md:ml-4" onclick="removeCombatant('${c.cid}')" title="Remover"><i class="fa-solid fa-xmark"></i></button>
-        `;
-        listEl.appendChild(div);
-    });
+    // Choose target: prioritize selected target (if opponent), otherwise opposite team, otherwise any other combatant
+    let target = null;
+    if (combatState.selectedTargetCid && combatState.selectedTargetCid !== cid) {
+        const st = combatState.combatants.find(x => x.cid === combatState.selectedTargetCid);
+        if (st && st.isMonster !== c.isMonster) target = st;
+    }
+    if (!target) {
+        const potentialTargets = combatState.combatants.filter(x => x.cid !== cid);
+        if (potentialTargets.length > 0) {
+            target = potentialTargets.find(x => x.isMonster !== c.isMonster) || potentialTargets[0];
+        }
+    }
     
-    // Auto-save on every render
+    adjustCombatStat(cid, 'stamina', -1);
+    
+    let charRef = !c.isMonster && c.refId ? characters.find(ch => ch.id === c.refId) : null;
+    let monRef = c.isMonster && c.refId ? monsters.find(m => m.id === c.refId) : null;
+    
+    // Base damage equal to character's base damage (AGI/FOR/level)
+    let baseDmg = 4;
+    if (charRef) {
+        baseDmg = Math.max(3, (charRef.attr?.agi ?? charRef.attr?.for ?? 4));
+    } else if (monRef) {
+        baseDmg = Math.max(3, (monRef.agi ?? monRef.for ?? 4));
+    } else if (c.attr) {
+        baseDmg = Math.max(3, (c.attr.agi ?? c.attr.for ?? 4));
+    }
+    
+    let agiBonus = (charRef?.attr?.agi ?? monRef?.agi ?? c.attr?.agi ?? 0);
+    let perBonus = (charRef?.attr?.per ?? monRef?.sed ?? c.attr?.per ?? 0);
+    let hitBonus = Math.max(agiBonus, perBonus);
+    
+    let postureMultiplier = 1;
+    if (c._hasFocus) {
+        hitBonus += perBonus;
+        postureMultiplier = 2;
+        c._hasFocus = false;
+    }
+
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    const hitTotal = d20 + hitBonus;
+    const postureDmg = 3 * postureMultiplier;
+    
+    if (target) {
+        if (target.isMonster) {
+            const isFlying = window.isFlyingCreature(target);
+            if (isFlying) {
+                // Free Aim in Expedition 33 grounds flying enemies!
+                target.isFlying = false;
+                if (target.tags) {
+                    target.tags = target.tags.filter(t => !/voa/i.test(t));
+                }
+                adjustCombatStat(target.cid, 'hp', -baseDmg);
+                adjustCombatStat(target.cid, 'lust', postureDmg + 2);
+                appendCombatLog(`🎯 <strong>${escapeHTML(c.name)}</strong> disparou com <strong>Mira Livre (Atirar)</strong> contra a criatura voadora <strong>${escapeHTML(target.name)}</strong>!<br>• Mira Precisa: <strong>${hitTotal}</strong> (d20: ${d20} + ${hitBonus}) | Dano Base: <strong class="text-red-400">${baseDmg} HP</strong> e <strong class="text-purple-300">+${postureDmg + 2} Postura</strong>. (-1 PA)<br>🦅💥 <strong>ALVO DERRUBADO!</strong> O tiro atingiu as asas de <strong>${escapeHTML(target.name)}</strong> e <strong>a criatura caiu no solo</strong>! Agora é terrestre e perdeu a esquiva aérea com vantagem!`, 'attack');
+                if (target.lust >= target.maxLust) {
+                    appendCombatLog(`💥 <strong>STAGGER!</strong> <strong>${escapeHTML(target.name)}</strong> atingiu 100% de Postura e ficou atordoado!`, 'stagger');
+                }
+            } else {
+                adjustCombatStat(target.cid, 'hp', -baseDmg);
+                adjustCombatStat(target.cid, 'lust', postureDmg);
+                appendCombatLog(`🎯 <strong>${escapeHTML(c.name)}</strong> disparou com <strong>Mira Livre (Atirar)</strong> em <strong>${escapeHTML(target.name)}</strong>!<br>• Acerto: <strong>${hitTotal}</strong> | Dano Base: <strong class="text-red-400">${baseDmg} HP</strong> e <strong class="text-purple-300">+${postureDmg} Postura</strong>. (-1 PA)`, 'attack');
+                if (target.lust >= target.maxLust) {
+                    appendCombatLog(`💥 <strong>STAGGER!</strong> <strong>${escapeHTML(target.name)}</strong> atingiu 100% de Postura e ficou atordoado!`, 'stagger');
+                }
+            }
+            window.advanceTurnForCombatant(cid);
+        } else {
+            // Target is a player/character -> reaction modal opens!
+            appendCombatLog(`🎯 <strong>${escapeHTML(c.name)}</strong> disparou com <strong>Mira Livre (Atirar)</strong> mirando em <strong>${escapeHTML(target.name)}</strong>!<br>• Acerto: <strong>${hitTotal}</strong> | Dano Base Potencial: <strong class="text-red-400">${baseDmg} HP</strong> e <strong class="text-purple-300">+${postureDmg} Postura</strong>. (-1 PA)<br>⚡ <em>Aguardando reação do defensor...</em>`, 'attack');
+            window.triggerIncomingAttack(c, target, hitTotal, baseDmg, postureDmg, 'Mira Livre (Atirar)', 'HP');
+        }
+    } else {
+        appendCombatLog(`🎯 <strong>${escapeHTML(c.name)}</strong> disparou um tiro no ar (Acerto: ${hitTotal}, Dano: ${baseDmg} HP). (-1 PA)`, 'attack');
+        window.advanceTurnForCombatant(cid);
+    }
+};
+
+window.quickCombatPhysical = function(cid) {
+    const c = combatState.combatants.find(x => x.cid === cid);
+    if (!c) return;
+
+    // In Expedition 33, standard physical attack generates +1 PA!
+    adjustCombatStat(cid, 'stamina', 1);
+
+    // Choose target: prioritize selected target (if opponent), otherwise opposite team, otherwise any other combatant
+    let target = null;
+    if (combatState.selectedTargetCid && combatState.selectedTargetCid !== cid) {
+        const st = combatState.combatants.find(x => x.cid === combatState.selectedTargetCid);
+        if (st && st.isMonster !== c.isMonster) target = st;
+    }
+    if (!target) {
+        const potentialTargets = combatState.combatants.filter(x => x.cid !== cid);
+        if (potentialTargets.length > 0) {
+            target = potentialTargets.find(x => x.isMonster !== c.isMonster) || potentialTargets[0];
+        }
+    }
+
+    let charRef = !c.isMonster && c.refId ? characters.find(ch => ch.id === c.refId) : null;
+    let forBonus = (charRef?.attr?.for || c.attr?.for || 0);
+
+    let hitBonus = forBonus;
+    let postureMultiplier = 1;
+    if (c._hasFocus) {
+        let perBonus = (charRef?.attr?.per ?? charRef?.attr?.von ?? c.attr?.per ?? 0);
+        hitBonus += perBonus;
+        postureMultiplier = 2;
+        c._hasFocus = false;
+    }
+
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    const hitTotal = d20 + hitBonus;
+    const dmgD6 = Math.floor(Math.random() * 6) + 1;
+    const hpDmg = 5 + forBonus + dmgD6;
+    const postureDmg = (Math.floor(Math.random() * 4) + 2) * postureMultiplier;
+
+    if (target) {
+        if (target.isMonster) {
+            const isFlying = window.isFlyingCreature(target);
+            if (isFlying) {
+                // Flying creature rolls dodge with advantage
+                const defMon = target.refId ? monsters.find(m => m.id === target.refId) : null;
+                const agi = defMon?.agi || target.attr?.agi || 0;
+                const d1 = Math.floor(Math.random() * 20) + 1;
+                const d2 = Math.floor(Math.random() * 20) + 1;
+                const best = Math.max(d1, d2);
+                const dodgeTotal = best + (agi * 2) + 2;
+
+                if (dodgeTotal >= hitTotal) {
+                    appendCombatLog(`🦅💨 <strong>${escapeHTML(target.name)}</strong> (Criatura Voadora) esquivou com vantagem do <strong>Ataque Físico</strong> de <strong>${escapeHTML(c.name)}</strong>!<br>• Esquiva Aérea: <strong class="text-emerald-400 font-mono">${dodgeTotal}</strong> [d20s: ${d1}, ${d2} → ${best} + ${agi*2+2}] vs Acerto: <strong>${hitTotal}</strong>. Dano evitado! (+1 PA gerado)`, 'dodge');
+                } else {
+                    adjustCombatStat(target.cid, 'hp', -hpDmg);
+                    adjustCombatStat(target.cid, 'lust', postureDmg);
+                    appendCombatLog(`⚔️💥 <strong>${escapeHTML(c.name)}</strong> acertou um <strong>Ataque Físico</strong> em pleno voo contra <strong>${escapeHTML(target.name)}</strong>!<br>• Acerto: <strong>${hitTotal}</strong> vs Esquiva: <strong>${dodgeTotal}</strong> | Dano: <strong class="text-red-400">${hpDmg} HP</strong> e <strong class="text-purple-300">+${postureDmg} Postura</strong>. (+1 PA gerado)`, 'attack');
+                    if (target.lust >= target.maxLust) {
+                        appendCombatLog(`💥 <strong>STAGGER!</strong> <strong>${escapeHTML(target.name)}</strong> atingiu 100% de Postura e está atordoado!`, 'stagger');
+                    }
+                }
+            } else {
+                // Terrestrial monster cannot dodge or parry, takes direct hit
+                adjustCombatStat(target.cid, 'hp', -hpDmg);
+                adjustCombatStat(target.cid, 'lust', postureDmg);
+                appendCombatLog(`⚔️ <strong>${escapeHTML(c.name)}</strong> desferiu um <strong>Ataque Físico</strong> certeiro contra <strong>${escapeHTML(target.name)}</strong>!<br>• Acerto: <strong>${hitTotal}</strong> (d20: ${d20} + FOR: ${forBonus}) | Dano: <strong class="text-red-400">${hpDmg} HP</strong> e <strong class="text-purple-300">+${postureDmg} Postura</strong>. (+1 PA gerado)`, 'attack');
+                if (target.lust >= target.maxLust) {
+                    appendCombatLog(`💥 <strong>STAGGER!</strong> <strong>${escapeHTML(target.name)}</strong> atingiu 100% de Postura e está atordoado!`, 'stagger');
+                }
+            }
+            window.advanceTurnForCombatant(cid);
+        } else {
+            // Target is a player/character -> reaction modal opens!
+            appendCombatLog(`⚔️ <strong>${escapeHTML(c.name)}</strong> desferiu um <strong>Ataque Físico</strong> mirando em <strong>${escapeHTML(target.name)}</strong>!<br>• Acerto: <strong>${hitTotal}</strong> (d20: ${d20} + ${hitBonus}) | Dano Potencial: <strong class="text-red-400">${hpDmg} HP</strong> e <strong class="text-purple-300">+${postureDmg} Postura</strong>. (+1 PA gerado)<br>⚡ <em>Aguardando reação do defensor (Aparar ou Desviar)...</em>`, 'attack');
+            window.triggerIncomingAttack(c, target, hitTotal, hpDmg, postureDmg, 'Ataque Físico', 'HP');
+        }
+    } else {
+        appendCombatLog(`⚔️ <strong>${escapeHTML(c.name)}</strong> desferiu um Ataque Físico no ar (Acerto: ${hitTotal}, Potencial: ${hpDmg} HP / +${postureDmg} Postura). (+1 PA gerado)`, 'attack');
+        window.advanceTurnForCombatant(cid);
+    }
+};
+
+window.quickCombatAttack = window.quickCombatPhysical;
+
+window.openCombatSkillsModal = function(cid) {
+    const c = combatState.combatants.find(x => x.cid === cid);
+    if (!c) return;
+
+    combatState.activeSkillCasterCid = cid;
+    const modal = document.getElementById('modal-combat-skills');
+    if (!modal) return;
+
+    let charRef = !c.isMonster && c.refId ? characters.find(ch => ch.id === c.refId) : null;
+
+    const nameEl = document.getElementById('cskills-caster-name');
+    if (nameEl) nameEl.textContent = c.name;
+    const paEl = document.getElementById('cskills-caster-pa');
+    if (paEl) paEl.textContent = c.stamina !== undefined ? c.stamina : 0;
+    
+    const infoEl = document.getElementById('cskills-combatant-info');
+    if (infoEl) {
+        infoEl.textContent = `${c.name} (${c.isMonster ? 'Criatura' : (charRef?.class || 'Expedicionário')}) • Selecione uma habilidade para usar seus Pontos de Ação (PA)`;
+    }
+
+    // Populate Target Select
+    const targetSelect = document.getElementById('cskills-target-select');
+    if (targetSelect) {
+        targetSelect.innerHTML = '';
+        let defaultTargetCid = null;
+        if (combatState.selectedTargetCid && combatState.selectedTargetCid !== c.cid) {
+            const st = combatState.combatants.find(x => x.cid === combatState.selectedTargetCid);
+            if (st && st.isMonster !== c.isMonster) defaultTargetCid = st.cid;
+        }
+        if (!defaultTargetCid) {
+            const opp = combatState.combatants.find(x => x.cid !== c.cid && x.isMonster !== c.isMonster);
+            if (opp) defaultTargetCid = opp.cid;
+        }
+
+        combatState.combatants.forEach(target => {
+            const opt = document.createElement('option');
+            opt.value = target.cid;
+            const isTargetFlying = window.isFlyingCreature(target);
+            opt.textContent = `${target.name} [${target.isMonster ? (isTargetFlying ? 'Criatura Voadora' : 'Criatura Terrestre') : 'Expedicionário'}] (HP: ${target.hp}/${target.maxHp} | Postura: ${target.lust}/${target.maxLust})`;
+            if (defaultTargetCid && defaultTargetCid === target.cid) {
+                opt.selected = true;
+            }
+            targetSelect.appendChild(opt);
+        });
+    }
+
+    // Build skill list (Expedition 33 uses ONLY Action Points (PA) for skills & attacks!)
+    const skillsListEl = document.getElementById('cskills-list');
+    if (!skillsListEl) return;
+    skillsListEl.innerHTML = '';
+
+    const availableSkills = [
+        {
+            key: 'picto_chroma_blast',
+            name: 'Impacto Esmaecido',
+            type: 'Ofensiva Tática',
+            costPA: 2,
+            desc: 'Canaliza poder de combate concentrado e desfere contra o alvo, causando alto impacto na postura.',
+            formula: '2d8 + CHR (Dano Mágico) • +8 Postura'
+        },
+        {
+            key: 'skill_posture_break',
+            name: 'Golpe Rompe-Postura',
+            type: 'Físico / Ruptura',
+            costPA: 2,
+            desc: 'Ataque pesado desferido no centro de massa inimigo com o objetivo de quebrar a postura e provocar Stagger.',
+            formula: '1d6 + FOR (Dano Físico) • +14 Postura'
+        },
+        {
+            key: 'picto_ink_storm',
+            name: 'Tormenta de Golpes',
+            type: 'Habilidade Suprema',
+            costPA: 3,
+            desc: 'Uma torrente violenta de ataques contínuos que engole o alvo com múltiplas estocadas cáusticas.',
+            formula: '3d8 + CHR (Dano Alto) • +12 Postura'
+        },
+        {
+            key: 'skill_focus_weakpoint',
+            name: 'Análise de Ponto Fraco',
+            type: 'Tático / Foco',
+            costPA: 1,
+            desc: 'Mira meticulosamente na brecha do inimigo. O próximo ataque ganha +PER no Acerto e causa o DOBRO de Dano de Postura!',
+            formula: '+PER no Acerto • 2x Postura no próximo ataque'
+        },
+        {
+            key: 'skill_recover_guard',
+            name: 'Recompor Guarda',
+            type: 'Técnica Defensiva',
+            costPA: 1,
+            desc: 'Recua um passo, reajusta a empunhadura e limpa a pressão sobre o escudo, reduzindo 25 de postura acumulada.',
+            formula: '-25 Postura de si mesmo'
+        }
+    ];
+
+    // Add character-specific archetype skills if available
+    if (charRef && charRef.class && charRef.class.toLowerCase().includes('franco')) {
+        availableSkills.unshift({
+            key: 'skill_franco_parry',
+            name: 'Aparar de Franco Golpeador',
+            type: 'Assinatura Ativa',
+            costPA: 1,
+            desc: 'Assume a postura de combate agressiva dos Francos Golpeadores, com bônus de +3 para parry imediato e contra-ataque avassalador.',
+            formula: '+3 no Teste de Aparar • Contra-ataque de Postura'
+        });
+    }
+
+    // Add character equipped skills if any
+    if (charRef && charRef.equippedSkillIds && typeof globalSkills !== 'undefined') {
+        charRef.equippedSkillIds.forEach(skId => {
+            const sk = globalSkills.find(s => s.id === skId);
+            if (sk) {
+                availableSkills.push({
+                    key: `custom_${sk.id}`,
+                    name: sk.name,
+                    type: sk.type || 'Habilidade Equipada',
+                    costPA: 2,
+                    desc: sk.desc || 'Habilidade customizada equipada na ficha.',
+                    formula: sk.test ? `Teste: ${sk.test}` : '2d6 + Atributo'
+                });
+            }
+        });
+    }
+
+    availableSkills.forEach(sk => {
+        const canAfford = (c.stamina >= sk.costPA);
+        const card = document.createElement('div');
+        card.className = `p-3.5 rounded-xl border transition ${canAfford ? 'bg-[#0e0e10] border-stone-800 hover:border-stone-600 shadow-md' : 'bg-[#0a0a0c] border-stone-900 opacity-50'}`;
+        card.innerHTML = `
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-1 flex-wrap">
+                        <span class="font-bold text-xs text-[#ede3d2] tracking-wider">${escapeHTML(sk.name)}</span>
+                        <span class="text-[9px] uppercase tracking-wider px-1.5 py-0.2 rounded bg-black/60 border border-stone-800 text-stone-400 font-mono">${escapeHTML(sk.type)}</span>
+                    </div>
+                    <p class="text-xs text-stone-400 italic leading-snug mb-1.5">${escapeHTML(sk.desc)}</p>
+                    <div class="flex items-center gap-3 text-xs flex-wrap font-mono">
+                        <span class="text-sky-300 font-bold"><i class="fa-solid fa-bolt mr-1"></i>${sk.costPA} PA</span>
+                        <span class="text-purple-300"><i class="fa-solid fa-shield-halved mr-1"></i>${sk.formula}</span>
+                    </div>
+                </div>
+                <button ${canAfford ? '' : 'disabled'} class="shrink-0 ${canAfford ? 'border border-stone-700 bg-[#141416] hover:bg-[#202024] text-[#ede3d2] active:scale-95' : 'bg-[#0a0a0c] text-stone-600 border-stone-900 cursor-not-allowed'} border px-3 py-2 rounded-lg text-xs font-bold transition shadow flex items-center justify-center gap-1.5" onclick="executeCombatSkill('${sk.key}')">
+                    <span class="e33-key text-[9px]"><i class="fa-solid fa-wand-magic-sparkles"></i></span> Executar
+                </button>
+            </div>
+        `;
+        skillsListEl.appendChild(card);
+    });
+
+    modal.showModal();
+};
+
+window.executeCombatSkill = function(skillKey) {
+    const casterCid = combatState.activeSkillCasterCid;
+    const c = combatState.combatants.find(x => x.cid === casterCid);
+    if (!c) return;
+
+    const targetSelect = document.getElementById('cskills-target-select');
+    const targetCid = targetSelect ? targetSelect.value : null;
+    let target = combatState.combatants.find(x => x.cid === targetCid);
+    if (!target || target.cid === casterCid || (c.isMonster && target.isMonster)) {
+        target = combatState.combatants.find(x => x.cid !== casterCid && x.isMonster !== c.isMonster)
+              || combatState.combatants.find(x => x.cid !== casterCid);
+    }
+
+    let charRef = !c.isMonster && c.refId ? characters.find(ch => ch.id === c.refId) : null;
+    let monRef = c.isMonster && c.refId ? monsters.find(m => m.id === c.refId) : null;
+    let chrBonus = (charRef?.attr?.chr ?? charRef?.attr?.mis ?? monRef?.sed ?? c.attr?.chr ?? 2);
+    let forBonus = (charRef?.attr?.for ?? monRef?.con ?? c.attr?.for ?? 2);
+    let perBonus = (charRef?.attr?.per ?? charRef?.attr?.von ?? monRef?.von ?? c.attr?.per ?? 2);
+
+    const modal = document.getElementById('modal-combat-skills');
+
+    if (skillKey === 'skill_focus_weakpoint') {
+        if (c.stamina < 1) {
+            alert(`${c.name} não possui 1 PA suficiente!`);
+            return;
+        }
+        adjustCombatStat(c.cid, 'stamina', -1);
+        c._hasFocus = true;
+        appendCombatLog(`🎯 <strong>${escapeHTML(c.name)}</strong> analisou as brechas de <strong>${target ? escapeHTML(target.name) : 'seus inimigos'}</strong>!<br>• Ponto Fraco Identificado: O próximo ataque causará <strong class="text-purple-300">+${perBonus} Acerto</strong> e <strong>DOBRO de Dano de Postura</strong>! (-1 PA)`, 'info');
+        if (modal) modal.close();
+        renderRPG();
+        window.advanceTurnForCombatant(c.cid);
+        return;
+    }
+
+    if (skillKey === 'skill_recover_guard') {
+        if (c.stamina < 1) {
+            alert(`${c.name} não possui 1 PA suficiente!`);
+            return;
+        }
+        adjustCombatStat(c.cid, 'stamina', -1);
+        adjustCombatStat(c.cid, 'lust', -25);
+        appendCombatLog(`🛡️ <strong>${escapeHTML(c.name)}</strong> recuou um passo e recompôs a guarda!<br>• Postura Aliviada: <strong class="text-emerald-400">-25 Postura acumulada</strong>. (-1 PA)`, 'recover');
+        if (modal) modal.close();
+        renderRPG();
+        window.advanceTurnForCombatant(c.cid);
+        return;
+    }
+
+    if (skillKey === 'skill_franco_parry') {
+        if (c.stamina < 1) {
+            alert(`${c.name} não possui 1 PA suficiente!`);
+            return;
+        }
+        adjustCombatStat(c.cid, 'stamina', -1);
+        c._parryBonus = (c._parryBonus || 0) + 3;
+        appendCombatLog(`⚡ <strong>${escapeHTML(c.name)}</strong> assumiu a guarda do <strong>Franco Golpeador</strong>!<br>• Técnica de Aparar Ativada: Concede <strong class="text-purple-300">+3 de Bônus em Aparar</strong> no próximo confronto! (-1 PA)`, 'parry');
+        if (modal) modal.close();
+        renderRPG();
+        window.advanceTurnForCombatant(c.cid);
+        return;
+    }
+
+    let costPA = 2;
+    let skillName = 'Impacto Esmaecido';
+    let hpDmg = 12;
+    let postureDmg = 8;
+    let dmgType = 'MAG';
+
+    if (skillKey === 'picto_chroma_blast') {
+        costPA = 2;
+        skillName = 'Impacto Esmaecido';
+        hpDmg = (Math.floor(Math.random() * 8) + 1) + (Math.floor(Math.random() * 8) + 1) + chrBonus;
+        postureDmg = 8;
+        dmgType = 'MAG';
+    } else if (skillKey === 'skill_posture_break') {
+        costPA = 2;
+        skillName = 'Golpe Rompe-Postura';
+        hpDmg = (Math.floor(Math.random() * 6) + 1) + forBonus;
+        postureDmg = 14;
+        dmgType = 'HP';
+    } else if (skillKey === 'picto_ink_storm') {
+        costPA = 3;
+        skillName = 'Tormenta de Golpes';
+        hpDmg = (Math.floor(Math.random() * 8) + 1) + (Math.floor(Math.random() * 8) + 1) + (Math.floor(Math.random() * 8) + 1) + chrBonus;
+        postureDmg = 12;
+        dmgType = 'MAG';
+    } else {
+        // Custom or equipped skill
+        costPA = 2;
+        skillName = skillKey.replace(/^custom_/, '');
+        if (typeof globalSkills !== 'undefined') {
+            const customSk = globalSkills.find(s => s.id === skillName);
+            if (customSk) skillName = customSk.name;
+        }
+        hpDmg = (Math.floor(Math.random() * 6) + 1) + (Math.floor(Math.random() * 6) + 1) + Math.max(forBonus, chrBonus);
+        postureDmg = 8;
+    }
+
+    if (c.stamina < costPA) {
+        alert(`${c.name} não possui PA suficiente! (Requer ${costPA} PA)`);
+        return;
+    }
+
+    adjustCombatStat(c.cid, 'stamina', -costPA);
+
+    if (c._hasFocus) {
+        postureDmg *= 2;
+        c._hasFocus = false;
+    }
+
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    const hitTotal = d20 + (dmgType === 'MAG' ? chrBonus : forBonus);
+
+    if (modal) modal.close();
+
+    if (target) {
+        if (target.isMonster) {
+            const isFlying = window.isFlyingCreature(target);
+            if (isFlying) {
+                // Flying creature auto-dodge with advantage
+                const defMon = target.refId ? monsters.find(m => m.id === target.refId) : null;
+                const agi = defMon?.agi || target.attr?.agi || 0;
+                const d1 = Math.floor(Math.random() * 20) + 1;
+                const d2 = Math.floor(Math.random() * 20) + 1;
+                const best = Math.max(d1, d2);
+                const dodgeTotal = best + (agi * 2) + 2;
+
+                if (dodgeTotal >= hitTotal) {
+                    appendCombatLog(`⚔️💨 <strong>${escapeHTML(c.name)}</strong> desferiu <strong>${escapeHTML(skillName)}</strong> contra <strong>${escapeHTML(target.name)}</strong>!<br>• A criatura voadora <strong>desviou em voo com vantagem</strong>! (Esquiva: <strong>${dodgeTotal}</strong> [${d1}, ${d2}] vs Acerto: <strong>${hitTotal}</strong>). Dano evitado! (-${costPA} PA)`, 'dodge');
+                } else {
+                    adjustCombatStat(target.cid, 'hp', -hpDmg);
+                    adjustCombatStat(target.cid, 'lust', postureDmg);
+                    appendCombatLog(`⚔️💥 <strong>${escapeHTML(c.name)}</strong> acertou <strong>${escapeHTML(skillName)}</strong> em <strong>${escapeHTML(target.name)}</strong>!<br>• Acerto: <strong>${hitTotal}</strong> vs Esquiva: <strong>${dodgeTotal}</strong>.<br>• Dano: <strong class="text-cyan-300">${hpDmg}</strong> | Ruptura: <strong class="text-purple-300">+${postureDmg} Postura</strong>. (-${costPA} PA)`, 'picto');
+                    if (target.lust >= target.maxLust) {
+                        appendCombatLog(`💥 <strong>STAGGER TOTAL!</strong> <strong>${escapeHTML(target.name)}</strong> teve sua guarda despedaçada e está atordoado!`, 'stagger');
+                    }
+                }
+            } else {
+                // Terrestrial creature takes direct hit
+                adjustCombatStat(target.cid, 'hp', -hpDmg);
+                adjustCombatStat(target.cid, 'lust', postureDmg);
+                appendCombatLog(`⚔️💥 <strong>${escapeHTML(c.name)}</strong> desferiu a habilidade <strong>${escapeHTML(skillName)}</strong> em <strong>${escapeHTML(target.name)}</strong>!<br>• Acerto: <strong>${hitTotal}</strong> | Dano: <strong class="text-cyan-300">${hpDmg}</strong> | Ruptura: <strong class="text-purple-300">+${postureDmg} Postura</strong>. (-${costPA} PA)`, 'picto');
+                if (target.lust >= target.maxLust) {
+                    appendCombatLog(`💥 <strong>STAGGER TOTAL!</strong> <strong>${escapeHTML(target.name)}</strong> teve a postura estilhaçada e entrou em colapso!`, 'stagger');
+                }
+            }
+            window.advanceTurnForCombatant(c.cid);
+        } else {
+            // Target is a player/character -> reaction modal opens!
+            appendCombatLog(`⚔️ <strong>${escapeHTML(c.name)}</strong> desferiu <strong>${escapeHTML(skillName)}</strong> mirando em <strong>${escapeHTML(target.name)}</strong>!<br>• Acerto: <strong>${hitTotal}</strong> | Dano Potencial: <strong class="text-cyan-300">${hpDmg}</strong> e <strong class="text-purple-300">+${postureDmg} Postura</strong>. (-${costPA} PA)<br>⚡ <em>Aguardando reação do defensor...</em>`, 'picto');
+            window.triggerIncomingAttack(c, target, hitTotal, hpDmg, postureDmg, skillName, dmgType);
+        }
+    } else {
+        appendCombatLog(`⚔️ <strong>${escapeHTML(c.name)}</strong> executou ${escapeHTML(skillName)}. (-${costPA} PA)`, 'picto');
+        window.advanceTurnForCombatant(c.cid);
+    }
+
+    renderRPG();
+};
+
+window.openCombatItemsModal = function(cid) {
+    const c = combatState.combatants.find(x => x.cid === cid);
+    if (!c) return;
+
+    combatState.activeItemUserCid = cid;
+    const modal = document.getElementById('modal-combat-items');
+    if (!modal) return;
+
+    const targetSelect = document.getElementById('citems-target-select');
+    if (targetSelect) {
+        targetSelect.innerHTML = '';
+        combatState.combatants.forEach(target => {
+            const opt = document.createElement('option');
+            opt.value = target.cid;
+            opt.textContent = `${target.name} (${target.cid === cid ? 'A si mesmo' : (target.isMonster ? 'Criatura' : 'Aliado')}) [HP: ${target.hp}/${target.maxHp} | Postura: ${target.lust}/${target.maxLust}]`;
+            if (target.cid === cid) opt.selected = true;
+            targetSelect.appendChild(opt);
+        });
+    }
+
+    modal.showModal();
+};
+
+window.executeCombatItem = function(itemType) {
+    const userCid = combatState.activeItemUserCid;
+    const user = combatState.combatants.find(x => x.cid === userCid);
+    if (!user) return;
+
+    const targetSelect = document.getElementById('citems-target-select');
+    const targetCid = targetSelect ? targetSelect.value : userCid;
+    const target = combatState.combatants.find(x => x.cid === targetCid);
+    if (!target) return;
+
+    const modal = document.getElementById('modal-combat-items');
+
+    if (itemType === 'heal_hp') {
+        adjustCombatStat(target.cid, 'hp', 35);
+        appendCombatLog(`🧪 <strong>${escapeHTML(user.name)}</strong> usou <strong>Tingimento de Cura</strong> em <strong>${escapeHTML(target.name)}</strong>!<br>• Efeito: Restabeleceu <strong class="text-emerald-400 font-bold">+35 HP</strong> com pigmento revitalizante.`, 'recover');
+    } else if (itemType === 'heal_posture') {
+        adjustCombatStat(target.cid, 'lust', -30);
+        appendCombatLog(`🛡️ <strong>${escapeHTML(user.name)}</strong> aplicou <strong>Bálsamo de Guarda</strong> em <strong>${escapeHTML(target.name)}</strong>!<br>• Efeito: Aliviou a tensão na defesa (<strong class="text-purple-300 font-bold">-30 Postura acumulada</strong>), prevenindo Stagger.`, 'recover');
+    } else if (itemType === 'heal_status') {
+        adjustCombatStat(target.cid, 'stamina', 1);
+        appendCombatLog(`✨ <strong>${escapeHTML(user.name)}</strong> usou <strong>Pó Restaurador</strong> em <strong>${escapeHTML(target.name)}</strong>!<br>• Efeito: Aliviou aflições e concedeu <strong class="text-sky-300 font-bold">+1 PA de foco</strong>.`, 'recover');
+    } else if (itemType === 'heal_pa') {
+        adjustCombatStat(target.cid, 'stamina', 2);
+        appendCombatLog(`⚡ <strong>${escapeHTML(user.name)}</strong> administrou um <strong>Elixir de Fôlego</strong> em <strong>${escapeHTML(target.name)}</strong>!<br>• Efeito: Concedeu <strong class="text-sky-400 font-bold">+2 PA imediatos</strong> para agir no combate.`, 'recover');
+    }
+
+    if (modal) modal.close();
+    renderRPG();
+    window.advanceTurnForCombatant(userCid);
+};
+
+window.quickCombatPicto = function(cid) {
+    window.openCombatSkillsModal(cid);
+};
+
+window.quickCombatRecover = function(cid) {
+    const c = combatState.combatants.find(x => x.cid === cid);
+    if (!c) return;
+    if (c.stamina < 1) {
+        alert(`${c.name} não possui Fôlego/PA suficiente! (Requer 1 PA)`);
+        return;
+    }
+    
+    adjustCombatStat(cid, 'stamina', -1);
+    adjustCombatStat(cid, 'lust', -20);
+    adjustCombatStat(cid, 'stamina', 2);
+    
+    appendCombatLog(`🛡️ <strong>${escapeHTML(c.name)}</strong> recompôs a guarda e recuperou o fôlego!<br>• Postura: <strong class="text-emerald-400">-20 Postura acumulada</strong> (Guarda restabelecida). (-1 PA, +2 Fôlego)`, 'recover');
+    window.advanceTurnForCombatant(cid);
+};
+
+window.quickCombatFocus = function(cid) {
+    const c = combatState.combatants.find(x => x.cid === cid);
+    if (!c) return;
+    if (c.stamina < 1) {
+        alert(`${c.name} não possui Fôlego/PA suficiente! (Requer 1 PA)`);
+        return;
+    }
+    
+    adjustCombatStat(cid, 'stamina', -1);
+    c._hasFocus = true;
+    
+    let charRef = !c.isMonster && c.refId ? characters.find(ch => ch.id === c.refId) : null;
+    let perBonus = (charRef?.attr?.per ?? charRef?.attr?.von ?? c.attr?.per ?? 0);
+    
+    appendCombatLog(`🎯 <strong>${escapeHTML(c.name)}</strong> focou no <strong>Ponto Fraco</strong> do alvo!<br>• Análise da Pintora: Próximo ataque ganha <strong class="text-purple-300">+${perBonus} Acerto</strong> e causa <strong>dobro de Dano de Postura</strong>! (-1 PA)`, 'info');
+    window.advanceTurnForCombatant(cid);
+};
+
+window.quickCombatParry = function(cid) {
+    const c = combatState.combatants.find(x => x.cid === cid);
+    if (!c) return;
+
+    if (c.isMonster) {
+        alert("Criaturas não podem aparar!");
+        return;
+    }
+
+    if (window.currentIncomingAttack && window.currentIncomingAttack.targetCid === cid) {
+        window.resolveIncomingDefense('parry');
+        return;
+    }
+    
+    let charRef = !c.isMonster && c.refId ? characters.find(ch => ch.id === c.refId) : null;
+    let perBonus = (charRef?.attr?.per ?? charRef?.attr?.von ?? c.attr?.per ?? 0);
+    
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    const parryTotal = d20 + perBonus;
+    
+    appendCombatLog(`⚡ <strong>${escapeHTML(c.name)}</strong> assumiu postura de <strong>Aparar (Parry)</strong>!<br>• Teste de Percepção: <strong>${parryTotal}</strong> (d20: ${d20} + PER: ${perBonus}).<br>• Se o valor superar a CD do golpe inimigo: <em>Dano 100% anulado e contra-ataque imediato de Postura!</em>`, 'parry');
+};
+
+window.quickCombatDodge = function(cid) {
+    const c = combatState.combatants.find(x => x.cid === cid);
+    if (!c) return;
+
+    const isFlying = window.isFlyingCreature(c);
+    if (c.isMonster && !isFlying) {
+        alert("Criaturas terrestres não podem desviar!");
+        return;
+    }
+
+    if (window.currentIncomingAttack && window.currentIncomingAttack.targetCid === cid) {
+        window.resolveIncomingDefense('dodge');
+        return;
+    }
+
+    if (c.stamina < 1) {
+        alert(`${c.name} não possui Fôlego/PA para esquivar! (Requer 1 PA)`);
+        return;
+    }
+    
+    adjustCombatStat(cid, 'stamina', -1);
+    
+    let charRef = !c.isMonster && c.refId ? characters.find(ch => ch.id === c.refId) : null;
+    let defMon = c.isMonster && c.refId ? monsters.find(m => m.id === c.refId) : null;
+    let agiBonus = (charRef?.attr?.agi || defMon?.agi || c.attr?.agi || 0);
+    
+    if (isFlying) {
+        const d1 = Math.floor(Math.random() * 20) + 1;
+        const d2 = Math.floor(Math.random() * 20) + 1;
+        const best = Math.max(d1, d2);
+        const dodgeTotal = best + (agiBonus * 2) + 2;
+        appendCombatLog(`🦅💨 <strong>${escapeHTML(c.name)}</strong> (Criatura Voadora) realizou uma <strong>Esquiva Aérea com Vantagem</strong>!<br>• Teste com Vantagem: <strong class="text-emerald-400 font-mono">${dodgeTotal}</strong> [d20s: ${d1}, ${d2} → Maior: ${best} + 2xAGI+2: +${agiBonus * 2 + 2}]. (-1 PA)`, 'dodge');
+    } else {
+        const d20 = Math.floor(Math.random() * 20) + 1;
+        const dodgeTotal = d20 + (agiBonus * 2) + 2;
+        appendCombatLog(`💨 <strong>${escapeHTML(c.name)}</strong> realizou uma <strong>Esquiva Fluida</strong>!<br>• Teste de Agilidade: <strong>${dodgeTotal}</strong> (d20: ${d20} + 2x AGI + 2: ${agiBonus * 2 + 2}).<br>• Se o valor superar o acerto inimigo: <em>Nenhum dano é sofrido!</em> (-1 PA)`, 'dodge');
+    }
+};
+
+function renderRPG() {
+    const currentRound = Math.floor((combatState.round - 1) / Math.max(1, combatState.combatants.length)) + 1;
+    const roundEl = document.getElementById('rpg-round-counter');
+    if (roundEl) roundEl.innerText = currentRound;
+
+    const arenaEl = document.getElementById('e33-battle-arena');
+    const listEl = document.getElementById('combat-tracker-list');
+
+    // Estado Vazio (Sem Combatentes)
+    if (!combatState.combatants || combatState.combatants.length === 0) {
+        if (arenaEl) {
+            arenaEl.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-24 text-center space-y-4 my-auto relative z-10">
+                    <div class="w-16 h-16 border border-stone-700 bg-[#141416] flex items-center justify-center font-cinzel text-3xl text-[#ede3d2] shadow-2xl">
+                        33
+                    </div>
+                    <div class="font-cinzel text-xl md:text-2xl tracking-[0.25em] text-[#ede3d2] uppercase font-bold">
+                        A Expedição Aguarda em Lumière
+                    </div>
+                    <p class="italic text-sm text-stone-400 max-w-md">
+                        Adicione expedicionários ou criaturas Nevii para ingressar no campo de batalha de Clair Obscur.
+                    </p>
+                    <button onclick="document.getElementById('btn-combat-add').click()" class="mt-2 px-5 py-2.5 border border-stone-600 bg-[#141416] hover:bg-[#202024] text-[#ede3d2] text-xs tracking-widest transition flex items-center gap-2 shadow-xl active:scale-95">
+                        <span class="e33-key">+</span> Adicionar Primeiro Combatente
+                    </button>
+                </div>
+            `;
+        }
+        if (listEl) {
+            listEl.innerHTML = `
+                <div class="col-span-full text-center text-stone-500 py-8 italic text-sm">
+                    Nenhum combatente ativo. Clique em "Novo Combatente" para iniciar.
+                </div>
+            `;
+        }
+        localStorage.setItem('bd_combat_state', JSON.stringify(combatState));
+        return;
+    }
+
+    const active = combatState.combatants[0];
+    
+    // Identificar Alvo (Prioriza selecionado, senão o primeiro oponente da equipe oposta, senão o próximo combatente)
+    let target = null;
+    if (combatState.selectedTargetCid && combatState.selectedTargetCid !== active.cid) {
+        target = combatState.combatants.find(c => c.cid === combatState.selectedTargetCid);
+    }
+    if (!target) {
+        const potential = combatState.combatants.filter(c => c.cid !== active.cid);
+        target = potential.find(c => c.isMonster !== active.isMonster) || potential[0] || null;
+    }
+
+    // Grau de Perfeição (Clair Obscur Rank: D, C, B, A, S)
+    if (!combatState.perfectionGrade) combatState.perfectionGrade = 'D';
+
+    // 1. RENDERIZAR ARENA DE BATALHA DE CLAIR OBSCUR (Inspirada diretamente na screenshot do jogo)
+    if (arenaEl) {
+        const isTargetStagger = target && (target.lust || 0) >= (target.maxLust || 100);
+        const isTargetFlying = target && window.isFlyingCreature(target);
+        const activeStamina = Math.max(0, active.stamina || 0);
+
+        // Gera os 10 marcadores de PA (pontos de ação / fôlego em formato de traços chanfrados azuis)
+        let apTicksHtml = '';
+        for (let t = 0; t < 10; t++) {
+            apTicksHtml += `<span class="e33-ap-tick ${t < activeStamina ? '' : 'empty'}"></span>`;
+        }
+
+        // Roda a lista vertical de turnos (Initiative Rail da esquerda)
+        let queueHtml = combatState.combatants.map((cb, idx) => {
+            const isFirst = idx === 0;
+            const isFlyingCb = window.isFlyingCreature(cb);
+            const isAlly = !cb.isMonster;
+
+            return `
+                <div onclick="window.setTurnToCombatant('${cb.cid}')" class="e33-queue-item ${isFirst ? 'active' : 'opacity-70 hover:opacity-100'} flex items-center gap-2 group" title="${isFirst ? 'Combatente atualmente no turno' : 'Clique para transferir a vez para este combatente'}">
+                    <div class="relative flex items-center justify-center">
+                        ${isFirst ? '<div class="e33-sunburst"></div>' : ''}
+                        <div class="e33-portrait-box ${isFirst ? 'border-[#bfa888] ring-1 ring-[#bfa888]/60' : 'border-stone-700'}">
+                            ${cb.avatar ? `
+                                <img src="${escapeHTML(cb.avatar)}" class="w-full h-full object-cover">
+                            ` : `
+                                <div class="w-full h-full flex items-center justify-center text-stone-400 text-xs">
+                                    <i class="fa-solid ${cb.isMonster ? 'fa-ghost' : 'fa-user-ninja'}"></i>
+                                </div>
+                            `}
+                            <div class="absolute bottom-0 right-0 w-2.5 h-2.5 ${isAlly ? 'bg-sky-500' : 'bg-red-500'}"></div>
+                        </div>
+                    </div>
+                    <div class="hidden sm:flex flex-col text-left">
+                        <span class="text-[11px] font-bold leading-tight ${isFirst ? 'text-[#ede3d2]' : 'text-stone-400'} flex items-center gap-1">
+                            ${escapeHTML(cb.name)}
+                            ${isFlyingCb ? '<i class="fa-solid fa-feather-pointed text-[9px] text-sky-400"></i>' : ''}
+                        </span>
+                        <span class="text-[9px] text-stone-500 font-mono">
+                            ${cb.hp} HP &bull; ${cb.stamina} PA
+                        </span>
+                    </div>
+                </div>
+            `;
+        }).join('<div class="w-0.5 h-3 bg-stone-700/50 mx-5 my-0.5"></div>');
+
+        arenaEl.innerHTML = `
+            <!-- Topo: HUD do Chefe / Alvo Inimigo (GOLGRA HUD) -->
+            <div class="relative z-10 w-full flex flex-col items-center justify-center pb-4 border-b border-stone-800/80">
+                ${target ? `
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-[#bfa888] text-xs">◆</span>
+                        <span class="e33-boss-name text-sm md:text-base">${escapeHTML(target.name)}</span>
+                        <span class="text-[#bfa888] text-xs">◆</span>
+                        ${isTargetFlying ? '<span class="text-[9px] uppercase tracking-wider text-sky-300 font-bold border border-sky-500/30 px-1.5 py-0.2 bg-sky-950/40 rounded ml-1"><i class="fa-solid fa-feather-pointed"></i> Voo</span>' : ''}
+                        <button onclick="window.selectCombatTarget('${target.cid}')" class="text-stone-400 hover:text-[#ede3d2] text-[10px] ml-2 border border-stone-800 px-2 py-0.5 rounded bg-black/40" title="Trocar ou focar alvo">
+                            <i class="fa-solid fa-crosshairs text-[9px] text-[#bfa888]"></i> Alvo Focado
+                        </button>
+                    </div>
+
+                    <!-- Barra de Vida do Inimigo (Estilo Clair Obscur) -->
+                    <div class="w-full max-w-xl flex flex-col gap-1 px-4">
+                        <div class="relative h-2 bg-[#0c0c0c] border border-stone-800 rounded-sm overflow-hidden shadow-inner">
+                            <div class="h-full bg-[#c22d2d] transition-all duration-300" style="width: ${Math.min(100, Math.max(0, (target.hp / (target.maxHp || 100)) * 100))}%"></div>
+                        </div>
+                        
+                        <!-- Barra de Postura / Guarda Quebrada (Stagger) -->
+                        <div class="flex items-center justify-between text-[10px] font-mono text-stone-400 pt-0.5">
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-stone-500 uppercase text-[9px]">Postura:</span>
+                                <div class="w-32 h-1 bg-stone-900 border border-stone-800 overflow-hidden inline-block align-middle">
+                                    <div class="h-full ${isTargetStagger ? 'bg-red-500 animate-pulse' : 'bg-[#bfa888]'}" style="width: ${Math.min(100, ((target.lust || 0) / (target.maxLust || 100)) * 100)}%"></div>
+                                </div>
+                                <span class="${isTargetStagger ? 'text-red-400 font-bold' : 'text-stone-400'}">${target.lust || 0}/${target.maxLust || 100}</span>
+                            </div>
+                            <div class="font-bold ${isTargetStagger ? 'text-red-400 animate-pulse' : 'text-stone-300'}">
+                                ${isTargetStagger ? '💥 STAGGER (GUARDA QUEBRADA)' : `HP: ${target.hp} / ${target.maxHp}`}
+                            </div>
+                        </div>
+                    </div>
+                ` : `
+                    <div class="text-stone-500 italic text-xs tracking-wider">
+                        — Nenhum alvo focado —
+                    </div>
+                `}
+            </div>
+
+            <!-- Centro: Campo de Batalha com Fila Vertical, Menu de Pinceladas e Perfeição -->
+            <div class="relative z-10 grid grid-cols-1 md:grid-cols-12 gap-6 my-auto py-6 items-center">
+                
+                <!-- Coluna Esquerda: Fila Vertical de Iniciativa (Turn Order Rail) -->
+                <div class="md:col-span-3 flex md:flex-col items-center md:items-start gap-1 overflow-x-auto md:overflow-visible py-2 custom-scrollbar">
+                    <div class="text-[9.5px] uppercase tracking-widest text-[#bfa888]/80 mb-2 hidden md:block">
+                        <i class="fa-solid fa-hourglass-half mr-1"></i> Ordem dos Turnos
+                    </div>
+                    ${queueHtml}
+                </div>
+
+                <!-- Coluna Central: Menu de Ações em Pinceladas a Óleo (Oil Brush Strokes) -->
+                <div class="md:col-span-5 flex flex-col items-start space-y-3 pl-0 md:pl-4">
+                    
+                    <!-- Medidor Curvado de PA / Fôlego com Traços Azuis -->
+                    <div class="flex items-center gap-2 mb-1.5 pl-1">
+                        <div class="w-6 h-6 border border-sky-400/50 bg-[#0d1620] flex items-center justify-center font-bold text-xs text-sky-300 shadow">
+                            ${active.stamina || 0}
+                        </div>
+                        <div class="flex items-center gap-1">
+                            ${apTicksHtml}
+                        </div>
+                        <span class="text-[9px] uppercase tracking-widest text-sky-400/80 ml-1">PA / Fôlego</span>
+                    </div>
+
+                    <!-- Botão Lateral de Mira Livre -->
+                    <div class="flex items-center gap-2">
+                        <button onclick="quickCombatShoot('${active.cid}')" class="e33-aim-banner text-xs font-bold" title="Mira Livre: Disparo com arma de fogo. Derruba criaturas aladas!">
+                            <i class="fa-solid fa-crosshairs text-sky-400 text-xs"></i>
+                            <span class="tracking-wider">MIRA</span>
+                        </button>
+                    </div>
+
+                    <!-- As 4 Pinceladas Oficiais de Ação (Clair Obscur Action Strokes) -->
+                    <div class="flex flex-col space-y-2.5 w-full max-w-sm">
+                        <!-- Q: Atirar (Ataque Esmaecido / Mira Livre) -->
+                        <button onclick="quickCombatShoot('${active.cid}')" class="e33-brush-btn group" title="Atalho: [Q] Disparo de precisão. Custa 1 PA. Causa dano base e derruba criaturas voadoras ao solo!">
+                            <span class="e33-key">Q</span>
+                            <span class="tracking-[0.12em] text-xs font-bold text-[#ede3d2] group-hover:text-white transition">
+                                ATIRAR (MIRA LIVRE)
+                            </span>
+                            <span class="text-[10px] text-stone-400 italic ml-auto pr-3">1 PA</span>
+                        </button>
+
+                        <!-- W: Itens -->
+                        <button onclick="openCombatItemsModal('${active.cid}')" class="e33-brush-btn group" title="Atalho: [W] Abre a bolsa de suprimentos da expedição">
+                            <span class="e33-key">W</span>
+                            <span class="tracking-[0.12em] text-xs font-bold text-[#ede3d2] group-hover:text-white transition">
+                                ITENS
+                            </span>
+                            <span class="text-[10px] text-stone-400 italic ml-auto pr-3">Bolsa</span>
+                        </button>
+
+                        <!-- E: Habilidades -->
+                        <button onclick="openCombatSkillsModal('${active.cid}')" class="e33-brush-btn group" title="Atalho: [E] Abre técnicas ativas e Pictos de tinta do expedicionário">
+                            <span class="e33-key">E</span>
+                            <span class="tracking-[0.12em] text-xs font-bold text-[#ede3d2] group-hover:text-white transition">
+                                HABILIDADES
+                            </span>
+                            <span class="text-[10px] text-stone-400 italic ml-auto pr-3">Pictos</span>
+                        </button>
+
+                        <!-- F: Ataque Físico -->
+                        <button onclick="quickCombatPhysical('${active.cid}')" class="e33-brush-btn group" title="Atalho: [F] Ataque físico com arma corpo a corpo. Gera +1 PA e causa dano de HP e postura!">
+                            <span class="e33-key">F</span>
+                            <span class="tracking-[0.12em] text-xs font-bold text-[#ede3d2] group-hover:text-white transition">
+                                ATAQUE FÍSICO
+                            </span>
+                            <span class="text-[10px] text-[#bfa888] italic ml-auto pr-3">+1 PA</span>
+                        </button>
+                    </div>
+
+                    <!-- Reações Defensivas ou Indicadores de Tipo -->
+                    <div class="pt-2 pl-1">
+                        ${!active.isMonster ? `
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] text-stone-400 uppercase tracking-wider">Reação:</span>
+                                <button onclick="quickCombatParry('${active.cid}')" class="px-2.5 py-1 border border-stone-700 bg-[#141416] hover:bg-[#202024] text-[#ede3d2] text-[10px] font-bold flex items-center gap-1 transition shadow active:scale-95" title="Aparar: Anula dano com tempo perfeito e contra-ataca a Postura do inimigo!">
+                                    <i class="fa-solid fa-shield-virus text-stone-300"></i> Aparar (d20+PER)
+                                </button>
+                                <button onclick="quickCombatDodge('${active.cid}')" class="px-2.5 py-1 border border-stone-700 bg-[#141416] hover:bg-[#202024] text-stone-300 text-[10px] font-bold flex items-center gap-1 transition shadow active:scale-95" title="Desviar: Custa 1 PA para evitar o golpe">
+                                    <i class="fa-solid fa-person-running text-sky-400"></i> Desviar (1 PA)
+                                </button>
+                            </div>
+                        ` : `
+                            <div class="text-[10px] text-stone-500 font-mono italic">
+                                ${window.isFlyingCreature(active) ? '🦅 Criatura Alada (Esquiva com vantagem contra golpes físicos e Pictos)' : '🐾 Criatura Terrestre (Não pode aparar nem desviar)'}
+                            </div>
+                        `}
+                    </div>
+                </div>
+
+                <!-- Coluna Direita: Emblema de PERFEIÇÃO (Perfection Sigil HUD) -->
+                <div class="md:col-span-4 flex flex-col items-center md:items-end justify-center text-center md:text-right pr-0 md:pr-4">
+                    <div class="e33-perfection-card flex flex-col items-center md:items-end max-w-xs">
+                        <div class="e33-rank-emblem mb-3">
+                            ${escapeHTML(combatState.perfectionGrade)}
+                        </div>
+                        <h4 class="font-bold text-sm tracking-[0.2em] text-[#ede3d2] uppercase mb-1">
+                            PERFEIÇÃO
+                        </h4>
+                        <p class="italic text-[11px] text-stone-400 leading-relaxed">
+                            Suba seu Grau de Perfeição ao atacar e não ser atingido. Graus mais elevados aumentam seu poder e desbloqueiam novos efeitos de habilidade.
+                        </p>
+                        <div class="mt-2 pt-2 border-t border-stone-800 w-full flex justify-between text-[10px] font-mono text-stone-500">
+                            <span>Sequência / Combo:</span>
+                            <span class="text-[#bfa888] font-bold">${combatState.comboStreak || 0}x</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rodapé da Arena: Prompts de Teclado e HUD do Herói Ativo (Bottom Right HUD) -->
+            <div class="relative z-10 w-full flex flex-wrap items-end justify-between pt-4 border-t border-stone-800/80 gap-4">
+                
+                <!-- Prompt de Pular Turno (Estilo [ ↹ Pular turno ] do jogo) -->
+                <div class="flex items-center gap-3">
+                    <button onclick="window.nextTurn()" class="px-3 py-1.5 border border-stone-700 bg-stone-900/80 hover:bg-stone-800 text-[#ede3d2] text-xs flex items-center gap-2 transition active:scale-95 shadow" title="Passar para o próximo combatente (Atalho: Tab)">
+                        <span class="e33-key text-[10px]"><i class="fa-solid fa-arrow-right-arrow-left"></i></span>
+                        <span class="tracking-wider">Pular turno</span>
+                    </button>
+                    <span class="text-[10px] italic text-stone-500 hidden lg:inline">
+                        Atalhos rápidos: [Q] Atirar &bull; [W] Itens &bull; [E] Habilidades &bull; [F] Ataque Físico &bull; [Tab] Passar
+                    </span>
+                </div>
+
+                <!-- HUD do Combatente em Turno (Bottom Right Hero Card com CARGAS ESMAECIDAS) -->
+                <div class="flex items-center gap-3.5 bg-black/60 border border-stone-800 p-2.5 rounded-xl shadow-2xl">
+                    <div class="relative">
+                        <div class="w-12 h-12 rounded-full border-2 border-[#bfa888] overflow-hidden bg-[#0e0e10] shadow-lg">
+                            ${active.avatar ? `
+                                <img src="${escapeHTML(active.avatar)}" class="w-full h-full object-cover">
+                            ` : `
+                                <div class="w-full h-full flex items-center justify-center text-[#bfa888] text-base">
+                                    <i class="fa-solid ${active.isMonster ? 'fa-ghost' : 'fa-user-ninja'}"></i>
+                                </div>
+                            `}
+                        </div>
+                        <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-[#bfa888] text-black text-[9px] font-mono font-bold flex items-center justify-center rounded-full shadow">
+                            ${active.ini || 10}
+                        </div>
+                    </div>
+                    <div class="flex flex-col text-left">
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-xs text-[#ede3d2] tracking-wider">${escapeHTML(active.name)}</span>
+                            <span class="text-[9px] text-stone-500 font-mono">Turno Atual</span>
+                        </div>
+                        
+                        <!-- Barra de HP do Herói -->
+                        <div class="flex items-center gap-2 mt-1">
+                            <div class="w-28 h-2 bg-[#0c0c0c] border border-stone-800 rounded-sm overflow-hidden shadow-inner">
+                                <div class="h-full bg-[#c22d2d]" style="width: ${Math.min(100, Math.max(0, (active.hp / (active.maxHp || 100)) * 100))}%"></div>
+                            </div>
+                            <span class="font-mono text-[10px] text-red-300 font-bold">${active.hp} / ${active.maxHp}</span>
+                        </div>
+
+                        <!-- Cargas Esmaecidas (0/3 slots geométricos angulares) -->
+                        <div class="flex items-center justify-between gap-2 mt-1 pt-0.5">
+                            <span class="text-[8.5px] uppercase tracking-widest text-stone-400">CARGAS ESMAECIDAS</span>
+                            <div class="flex items-center gap-1">
+                                <span class="e33-charge-slot ${active.stamina >= 2 ? 'filled' : ''}"></span>
+                                <span class="e33-charge-slot ${active.stamina >= 4 ? 'filled' : ''}"></span>
+                                <span class="e33-charge-slot ${active.stamina >= 6 ? 'filled' : ''}"></span>
+                            </div>
+                            <span class="text-[9px] font-mono text-stone-400">${Math.min(3, Math.floor((active.stamina || 0) / 2))}/3</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // 2. RENDERIZAR GESTÃO TÁTICA DOS COMBATENTES (Abaixo da Arena para mestres e jogadores)
+    if (listEl) {
+        listEl.innerHTML = '';
+        combatState.combatants.forEach((c, idx) => {
+            const isTurn = idx === 0;
+            const isTarget = combatState.selectedTargetCid === c.cid;
+            const isFlying = window.isFlyingCreature(c);
+            const isStagger = (c.lust || 0) >= (c.maxLust || 100);
+
+            const card = document.createElement('div');
+            card.className = `p-3.5 rounded-xl border transition-all text-xs flex flex-col justify-between ${isTurn ? 'border-stone-500/80 bg-[#141418] shadow-lg ring-1 ring-stone-400/20' : isTarget ? 'border-sky-700/60 bg-[#0e1217]' : 'border-stone-800 bg-[#0a0a0d]'}`;
+
+            card.innerHTML = `
+                <div>
+                    <!-- Header do Combatente -->
+                    <div class="flex items-center justify-between pb-2 mb-2 border-b border-stone-800/80">
+                        <div class="flex items-center gap-2">
+                            <span class="font-mono text-[10px] px-1.5 py-0.5 rounded border border-stone-800 bg-black/50 ${isTurn ? 'text-[#ede3d2] font-bold' : 'text-stone-400'}">#${idx + 1}</span>
+                            <div class="font-bold text-xs text-[#ede3d2] flex items-center gap-1.5">
+                                ${escapeHTML(c.name)}
+                                ${isFlying ? '<i class="fa-solid fa-feather-pointed text-[9px] text-sky-400" title="Alado"></i>' : ''}
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <button onclick="window.setTurnToCombatant('${c.cid}')" class="px-2 py-0.5 text-[9.5px] rounded border border-stone-700 bg-stone-900 hover:bg-stone-800 text-stone-300" title="Ativar vez deste combatente">
+                                Vez
+                            </button>
+                            <button onclick="window.selectCombatTarget('${c.cid}')" class="px-2 py-0.5 text-[9.5px] rounded border ${isTarget ? 'border-sky-500 bg-sky-950/40 text-sky-300' : 'border-stone-800 bg-black/40 text-stone-400 hover:text-white'}" title="Focar este alvo">
+                                ${isTarget ? 'Alvo' : 'Focar'}
+                            </button>
+                            <button onclick="window.removeCombatant('${c.cid}')" class="text-stone-600 hover:text-red-400 px-1" title="Remover da mesa">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Medidores Numéricos e Ajustes Rápidos -->
+                    <div class="space-y-2">
+                        <!-- HP -->
+                        <div class="flex items-center justify-between text-[11px]">
+                            <span class="text-red-400/90 font-bold flex items-center gap-1"><i class="fa-solid fa-heart text-[9px]"></i> HP</span>
+                            <div class="flex items-center gap-1 font-mono">
+                                <button onclick="adjustCombatStat('${c.cid}', 'hp', -5)" class="px-1 text-[9px] border border-stone-800 rounded bg-black/40 hover:bg-red-950/40 text-red-300">-5</button>
+                                <span class="font-bold text-red-300 mx-1">${c.hp}/${c.maxHp}</span>
+                                <button onclick="adjustCombatStat('${c.cid}', 'hp', 5)" class="px-1 text-[9px] border border-stone-800 rounded bg-black/40 hover:bg-green-950/40 text-green-300">+5</button>
+                            </div>
+                        </div>
+
+                        <!-- Postura / Guarda -->
+                        <div class="flex items-center justify-between text-[11px]">
+                            <span class="text-purple-400/90 font-bold flex items-center gap-1"><i class="fa-solid fa-shield-halved text-[9px]"></i> Postura</span>
+                            <div class="flex items-center gap-1 font-mono">
+                                <button onclick="adjustCombatStat('${c.cid}', 'lust', -10)" class="px-1 text-[9px] border border-stone-800 rounded bg-black/40 hover:bg-emerald-950/40 text-emerald-300">-10</button>
+                                <span class="font-bold ${isStagger ? 'text-red-400 animate-pulse' : 'text-purple-300'} mx-1">${c.lust || 0}/${c.maxLust || 100}</span>
+                                <button onclick="adjustCombatStat('${c.cid}', 'lust', 10)" class="px-1 text-[9px] border border-stone-800 rounded bg-black/40 hover:bg-purple-950/40 text-purple-300">+10</button>
+                            </div>
+                        </div>
+
+                        <!-- PA / Fôlego -->
+                        <div class="flex items-center justify-between text-[11px]">
+                            <span class="text-sky-400/90 font-bold flex items-center gap-1"><i class="fa-solid fa-bolt text-[9px]"></i> PA</span>
+                            <div class="flex items-center gap-1 font-mono">
+                                <button onclick="adjustCombatStat('${c.cid}', 'stamina', -1)" class="px-1 text-[9px] border border-stone-800 rounded bg-black/40 hover:bg-sky-950/40 text-sky-300">-1</button>
+                                <span class="font-bold text-sky-300 mx-1">${c.stamina}/${c.maxSt}</span>
+                                <button onclick="adjustCombatStat('${c.cid}', 'stamina', 1)" class="px-1 text-[9px] border border-stone-800 rounded bg-black/40 hover:bg-sky-950/40 text-sky-300">+1</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            listEl.appendChild(card);
+        });
+    }
+
+    // Auto-salvar no localStorage
     localStorage.setItem('bd_combat_state', JSON.stringify(combatState));
+
+    // Inicializar listener de teclado para atalhos autênticos de Clair Obscur (Q, W, E, F, Tab)
+    if (!window._e33KeysAttached) {
+        window._e33KeysAttached = true;
+        window.addEventListener('keydown', (e) => {
+            if (window.currentTab !== 'rpg') return;
+            const tag = (document.activeElement && document.activeElement.tagName) || '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            // Se o modal de reação (Ataque Iminente) estiver aberto, processa as teclas Q, E, F, Espaço, Esc
+            const incomingModal = document.getElementById('modal-incoming-attack');
+            if (incomingModal && incomingModal.open) {
+                const k = e.key.toLowerCase();
+                // Se o minigame rítmico E33 estiver rodando, registra a batida com Espaço, Enter, Q ou E
+                if (window.e33RhythmState && window.e33RhythmState.active) {
+                    if (k === ' ' || k === 'enter' || k === 'q' || k === 'e') {
+                        e.preventDefault();
+                        window.recordE33RhythmBeat();
+                        return;
+                    }
+                }
+                // Fallback para qteState legado se existente
+                if (window.qteState && window.qteState.active) {
+                    if (k === ' ' || k === 'enter' || k === 'q' || k === 'e') {
+                        e.preventDefault();
+                        window.stopQTE();
+                        return;
+                    }
+                }
+                if (k === 'q') {
+                    e.preventDefault();
+                    window.startE33RhythmEvent('dodge');
+                    return;
+                } else if (k === 'e') {
+                    e.preventDefault();
+                    window.startE33RhythmEvent('parry');
+                    return;
+                } else if (k === 'f') {
+                    e.preventDefault();
+                    window.resolveIncomingDefense('block');
+                    return;
+                } else if (k === ' ' || k === 'enter') {
+                    e.preventDefault();
+                    window.resolveIncomingDefense('take');
+                    return;
+                } else if (k === 'escape') {
+                    e.preventDefault();
+                    window.closeIncomingAttackModal();
+                    return;
+                }
+            }
+
+            const openModal = document.querySelector('dialog[open]');
+            if (openModal) return;
+
+            if (!combatState.combatants || combatState.combatants.length === 0) return;
+            const curActive = combatState.combatants[0];
+            if (!curActive) return;
+
+            const key = e.key.toLowerCase();
+            if (key === 'q') {
+                e.preventDefault();
+                window.quickCombatShoot(curActive.cid);
+            } else if (key === 'w') {
+                e.preventDefault();
+                window.openCombatItemsModal(curActive.cid);
+            } else if (key === 'e') {
+                e.preventDefault();
+                window.openCombatSkillsModal(curActive.cid);
+            } else if (key === 'f') {
+                e.preventDefault();
+                window.quickCombatPhysical(curActive.cid);
+            } else if (key === 'tab') {
+                e.preventDefault();
+                window.nextTurn();
+            }
+        });
+    }
 }
 
 window.removeCombatant = function(cid) {
@@ -2357,75 +4894,56 @@ window.openExtendedActionsModal = function() {
     const tbody = document.getElementById('extended-actions-table');
     tbody.innerHTML = '';
     
-    const sed = char.attr.sed || 0;
     const force = char.attr.for || 0;
     const agi = char.attr.agi || 0;
-    const mis = char.attr.mis || 0;
-    const con = char.attr.con || 0;
-    
-    // We can add logic to check for specific perks if needed (e.g. char.perks?.sed?.["Pegada Firme"])
+    const vit = char.attr.vit ?? char.attr.con ?? 0;
+    const chr = char.attr.chr ?? char.attr.mis ?? 0;
+    const per = char.attr.per ?? char.attr.von ?? 0;
     
     const actions = [
-        // FÍSICO (10)
-        { cat: "Físico", name: "Soco Simples / Chute Rápido", effect: `1d4 + ${force} HP`, cost: "1 Ação", desc: "Ataque desarmado rápido. Teste de FOR ou AGI vs Defesa." },
-        { cat: "Físico", name: "Golpe Pesado", effect: `1d8 + ${force} HP`, cost: "1 Ação + 10 Stamina", desc: "Golpe focado em força bruta. Causa -1 na rolagem de acerto, mas rola dano maior. Teste FOR vs Def." },
-        { cat: "Físico", name: "Ataque com Arma Corpo-a-Corpo", effect: `Dano da Arma + ${force} HP`, cost: "1 Ação", desc: "Ataque padrão com qualquer arma de mão. Teste FOR ou AGI vs Def." },
-        { cat: "Físico", name: "Agarrão Bruto", effect: `Imobiliza + 1 Dano HP/LUST`, cost: "1 Ação", desc: "Teste Oposto: FOR vs FOR/AGI. Se sucesso, alvo fica imobilizado. Impede movimentos e esquivas." },
-        { cat: "Físico", name: "Arremesso de Corpo", effect: `2d4 + ${force} HP`, cost: "1 Ação", desc: "Requer que o alvo esteja Agarrado. Joga o alvo no chão (Derrubado). Teste FOR vs CON." },
-        { cat: "Físico", name: "Encontrão / Investida", effect: `1d6 + ${force} HP`, cost: "1 Ação + Movimento", desc: "Corre e bate no alvo. Pode derrubá-lo se a diferença no teste (FOR vs FOR) for maior que 5." },
-        { cat: "Físico", name: "Desarmar", effect: `Alvo solta a arma`, cost: "1 Ação + 5 Stamina", desc: "Teste Oposto AGI/FOR vs FOR do alvo. Alvo deixa cair a arma ou item da mão." },
-        { cat: "Físico", name: "Golpe Baixo / Chute nas Partes", effect: `1d4 + ${force} HP`, cost: "1 Ação", desc: "Causa fraqueza por 1 turno se acertar (Vantagem nos seus próximos ataques). AGI vs AGI." },
-        { cat: "Físico", name: "Ataque Furtivo", effect: `1d10 + ${agi} HP`, cost: "1 Ação", desc: "Exige que o alvo não tenha te visto. Teste de AGI furtiva. Dano alto e bônus de acerto (+2)." },
-        { cat: "Físico", name: "Sufocamento", effect: `Perde 10 Stamina/turno`, cost: "Ação de Manter", desc: "Requer alvo Agarrado. Corta o fôlego. Se Stamina zerar, alvo desmaia. Teste FOR vs CON contínuo." },
+        // FÍSICO
+        { cat: "Físico", name: "Golpe Básico", effect: `Dano Arma + ${force} HP (+1d4 Postura)`, cost: "1 PA", desc: "Ataque veloz com a arma equipada. Teste de FOR vs Defesa." },
+        { cat: "Físico", name: "Golpe Pesado de Ruptura", effect: `1d10 + ${force} HP (+2d4 Postura)`, cost: "2 PA", desc: "Ataque com peso concentrado visando rachar a postura do adversário." },
+        { cat: "Físico", name: "Estocada de Lumière", effect: `1d8 + ${agi} HP (Crítico 18-20)`, cost: "1 PA", desc: "Ataque rápido e penetrante que explora brechas na guarda do Nevii." },
+        { cat: "Físico", name: "Disparo em Ponto Fraco", effect: `1d10 + ${per} HP (+3d4 Postura)`, cost: "2 PA", desc: "Disparo à distância mirando no ponto fraco revelado pela Percepção." },
+        { cat: "Físico", name: "Sequência Rápida", effect: `2x (1d4 + ${Math.floor(force/2)}) HP`, cost: "2 PA", desc: "Dois golpes rápidos consecutivos. Cada acerto acumula impacto de postura." },
+        { cat: "Físico", name: "Investida com Escudo / Guarda", effect: `1d6 + ${force} HP + Derruba`, cost: "1 PA", desc: "Colide contra o alvo com a guarda erguida, forçando teste resistido de Força." },
+        { cat: "Físico", name: "Finalização de Stagger", effect: `3d10 + ${force * 2} HP Crítico`, cost: "2 PA", desc: "Só pode ser usado contra alvos em Guarda Quebrada (Stagger). Golpe devastador." },
 
-        // ERPG (10)
-        { cat: "ERPG", name: "Toque Sensível / Carícia Furtiva", effect: `1d4 + ${sed} LUST`, cost: "Ação Bônus", desc: "Tocar áreas erógenas por cima da roupa ou de relance. Teste: AGI vs AGI (se alvo resistir)." },
-        { cat: "ERPG", name: "Apalpar com Força / Amasso", effect: `1d6 + ${Math.max(sed, force)} LUST`, cost: "1 Ação", desc: "Exige contato corpo-a-corpo. Pode ser feito à força. Teste: FOR vs AGI/FOR." },
-        { cat: "ERPG", name: "Beijo Intenso / Francês", effect: `1d6 + ${Math.max(sed, mis)} LUST`, cost: "1 Ação", desc: "Beijo profundo. Alvo precisa estar agarrado ou consentir. Teste Oposto: SED vs VON." },
-        { cat: "ERPG", name: "Sexo Oral / Masturbação", effect: `1d8 + ${sed} LUST`, cost: "1 Ação", desc: "Estimulação direta das partes íntimas. Alvo deve estar desprotegido. Teste SED vs VON." },
-        { cat: "ERPG", name: "Penetração Frontal", effect: `2d6 + ${sed} LUST`, cost: "20 Stamina (Início)", desc: "Requer alvo submisso, imobilizado ou consentindo. Mantém 1d6+SED passivamente todo turno." },
-        { cat: "ERPG", name: "Penetração Forçada", effect: `1d8 + ${Math.max(force, sed)} LUST`, cost: "30 Stamina", desc: "Penetração agressiva. Teste Oposto: FOR vs AGI/FOR a cada turno para manter." },
-        { cat: "ERPG", name: "Montaria / Cavalgada", effect: `2d6 + ${agi} LUST`, cost: "15 Stamina", desc: "Usa Agilidade para ditar o ritmo no parceiro deitado/sentado. O alvo quase não tem defesa (VON)." },
-        { cat: "ERPG", name: "Fricção Corporal / Esfregação", effect: `1d4 + ${sed} LUST`, cost: "Ação de Movimento", desc: "Roçar o corpo de forma sugestiva ao passar ou lutar. Não gasta sua ação principal de ataque." },
-        { cat: "ERPG", name: "Estimulação com Brinquedos/Itens", effect: `1d10 + ${sed} LUST`, cost: "1 Ação", desc: "Uso de chicotes, vibradores ou tentáculos menores (Itens). Teste SED vs VON ou AGI." },
-        { cat: "ERPG", name: "Clímax Forçado", effect: `Mind Break (Imobiliza)`, cost: "Full Turn", desc: "Se o alvo chegar ao LUST máximo, você pode gastar 1 turno inteiro para finalizá-lo em orgasmo e derrubá-lo." },
+        // PICTOS / HABILIDADES
+        { cat: "Pictos", name: "Pincelada Ardente", effect: `2d8 + ${chr} Dano (+Fogo)`, cost: "2 PA", desc: "Traço incandescente que incendeia e desestabiliza a matéria do Nevii." },
+        { cat: "Pictos", name: "Mancha de Gelo", effect: `1d8 + ${chr} Dano + Reduz PA Alvo`, cost: "2 PA", desc: "Pigmento congelante que retarda a velocidade e a recuperação de postura do inimigo." },
+        { cat: "Pictos", name: "Impacto Esmaecido", effect: `2d8 + ${chr} Dano • +8 Postura`, cost: "2 PA", desc: "Canaliza poder concentrado de ataque que atinge o cerne da postura adversária." },
+        { cat: "Pictos", name: "Pincelada Curativa", effect: `Cura 2d8 + ${chr} HP do Aliado`, cost: "2 PA", desc: "Pinta uma runa curativa de Lumière restaurando a vitalidade de um aliado." },
+        { cat: "Pictos", name: "Barreira Cromática", effect: `Concede +25 Postura e +2 DF`, cost: "1 PA", desc: "Escudo de tinta endurecida que absorve impacto e protege a postura." },
+        { cat: "Pictos", name: "Tormenta de Golpes", effect: `3d8 + ${chr} em área + 12 Postura`, cost: "3 PA", desc: "Uma torrente violenta de ataques contínuos que engole o alvo com múltiplas estocadas." },
 
-        // DEFESA (10)
-        { cat: "Defesa", name: "Esquiva Ágil", effect: `Vantagem na Defesa Fís.`, cost: "Reação", desc: "Quando atacado, rola 1d20+AGI extra contra o ataque inimigo. Ignora dano se superar." },
-        { cat: "Defesa", name: "Bloqueio Bruto", effect: `Metade do Dano`, cost: "Reação + 5 Stamina", desc: "Usa os braços ou escudo. Teste FOR. Se falhar, leva dano cheio; se passar, metade." },
-        { cat: "Defesa", name: "Resistência de Constituição", effect: `-1d6 Dano HP`, cost: "Reação + 10 Stamina", desc: "Enrijece os músculos ao receber golpe inevitável. Reduz ativamente o dano de HP resultante." },
-        { cat: "Defesa", name: "Fuga / Desvencilhar", effect: `Solta do Agarrão`, cost: "1 Ação", desc: "Teste Oposto: AGI/FOR vs FOR do inimigo que te segura. Se sucesso, você fica livre." },
-        { cat: "Defesa", name: "Recuo Rápido", effect: `Ganha 3m distância`, cost: "Reação a Fim de Turno", desc: "Pula para trás após ser atacado (independente de acertarem ou não)." },
-        { cat: "Defesa", name: "Aparar (Parry)", effect: `Anula + Contra-Ataque`, cost: "Reação + 15 Stamina", desc: "Exige arma. Teste AGI vs Acerto inimigo. Se você vencer por +5 de dif., ataca de volta de graça." },
-        { cat: "Defesa", name: "Blindagem Mental", effect: `Vant. contra SED/Mística`, cost: "Reação + 10 Stamina", desc: "Foca a mente. Rola 2d20 e pega o melhor para resistir à provocação ou controle." },
-        { cat: "Defesa", name: "Morder os Lábios (Resistir LUST)", effect: `-1d4 LUST recebido`, cost: "Passivo (Quando sofre LUST)", desc: "Teste de CON ou VON (Dif 15). Se passar, reduz a excitação recebida pela dor." },
-        { cat: "Defesa", name: "Proteger Aliado", effect: `Recebe o ataque por ele`, cost: "Reação + Movimento", desc: "Você entra na frente de um aliado até 3m de distância e sofre todo o dano/efeito no lugar dele." },
-        { cat: "Defesa", name: "Postura Defensiva", effect: `+2 Defesa Global`, cost: "1 Ação", desc: "Você não ataca neste turno, mas inimigos têm Desvantagem para te acertar corpo-a-corpo." },
+        // DEFESA & REATIVO
+        { cat: "Defesa", name: "Aparar (Parry de Precisão)", effect: `Anula Dano + Contra-Ataque`, cost: "Reação (0 PA)", desc: "Teste de Percepção vs Acerto. Se vencer, desvia 100% do golpe e causa dano de postura imediato." },
+        { cat: "Defesa", name: "Esquiva Fluida", effect: `Evita Dano Inteiramente`, cost: "Reação (1 PA)", desc: "Rolamento sobre cinzas. Teste de Agilidade (8 + 2dAGI) contra ataque inimigo." },
+        { cat: "Defesa", name: "Bloqueio com Guarda", effect: `Absorve com Postura (-DF)`, cost: "Reação (0 PA)", desc: "Ergue a guarda. Reduz o dano de HP a zero, convertendo o impacto em dano de Postura." },
+        { cat: "Defesa", name: "Recuperar Guarda", effect: `Restaura 25 de Postura`, cost: "1 PA", desc: "Recua um passo, respira e recompõe a postura defensiva antes que quebre." },
+        { cat: "Defesa", name: "Proteger Companheiro", effect: `Intercepta Ataque no Aliado`, cost: "Reação (1 PA)", desc: "Entra na frente do golpe direcionado a um companheiro de expedição vulnerável." },
 
-        // SUPORTE / OUTROS (10)
-        { cat: "Suporte", name: "Provocação Verbal", effect: `1d4 + ${sed} LUST`, cost: "Ação Bônus", desc: "Sussurros, gemidos ou insultos eróticos. Teste: SED vs VON (até 5m)." },
-        { cat: "Suporte", name: "Ajudar Aliado", effect: `Vantagem para Aliado`, cost: "1 Ação", desc: "Prejudica a defesa de um inimigo para que um aliado tenha Vantagem no próximo ataque." },
-        { cat: "Suporte", name: "Usar Poção/Item Rápido", effect: `Varia do Item`, cost: "Ação Bônus", desc: "Tomar uma poção ou passar um item para um aliado próximo." },
-        { cat: "Suporte", name: "Amedrontar (Intimidação)", effect: `Alvo com Desvantagem`, cost: "1 Ação", desc: "Grito ou postura ameaçadora. Teste FOR vs VON. Inimigo atacará com debuff." },
-        { cat: "Suporte", name: "Inspecionar Ponto Fraco", effect: `Descobre Fraquezas`, cost: "1 Ação", desc: "Teste de Misticismo ou Vontade. Mestre revela atributos ou pontos fracos do monstro." },
-        { cat: "Suporte", name: "Inspirar", effect: `+1d4 no Teste do Aliado`, cost: "Ação Bônus + 10 Stamina", desc: "Palavras de coragem (ou gemidos encorajadores). Aliado pode somar 1d4 num teste neste turno." },
-        { cat: "Suporte", name: "Concentração Mística", effect: `Recupera 10 Stamina`, cost: "1 Ação", desc: "Foca a mente e respira, ignorando dor leve e se recuperando. Requer Teste de VON." },
-        { cat: "Suporte", name: "Imobilizar de Forma Erótica", effect: `Ambos Imóveis (LUST em ambos)`, cost: "1 Ação", desc: "Amarra ou prende o alvo de um jeito estimulante. Alvo sofre penalidade na Defesa e recebe LUST passivo." },
-        { cat: "Suporte", name: "Seduzir (Ação Longa)", effect: `Muda postura inimiga`, cost: "Full Turn", desc: "Para de atacar e tenta encantar um NPC ou Monstro hostil. Requer série de Testes de SED." },
-        { cat: "Suporte", name: "Fingir Desmaio / Rendição", effect: `Inimigos te ignoram`, cost: "Reação / Ação Bônus", desc: "Deita-se e parece inofensivo. Inimigos que não são muito inteligentes focarão em outros alvos." }
+        // TÁTICA & SUPORTE
+        { cat: "Suporte", name: "Focar Ponto Fraco", effect: `+${per} no Próx. Ataque e 2x Postura`, cost: "1 PA", desc: "Analisa a criatura e aponta o núcleo frágil do monstro para o grupo." },
+        { cat: "Suporte", name: "Gritar Encorajamento de Lumière", effect: `+1d4 em todos os Testes de Aliados`, cost: "1 PA", desc: "Lembrar a todos pelo que estão lutando na Expedição 33." },
+        { cat: "Suporte", name: "Elixir de Fôlego", effect: `Restaura +2 PA Imediatamente`, cost: "Item (1 Ação)", desc: "Consome essência revigorante para recuperar pontos de ação em combate." },
+        { cat: "Suporte", name: "Pó Restaurador", effect: `Alivia Aflições e +1 PA`, cost: "Item (1 Ação)", desc: "Sais aromáticos que recuperam a clareza e concedem 1 PA." },
+        { cat: "Suporte", name: "Distrair Nevii", effect: `Desvantagem no Ataque do Inimigo`, cost: "1 PA", desc: "Chama a atenção do monstro com barulho ou movimento em falso." }
     ];
     
     actions.forEach(act => {
-        let catColor = act.cat === 'Físico' ? 'text-red-400' : act.cat === 'ERPG' ? 'text-pink-400' : act.cat === 'Defesa' ? 'text-blue-400' : 'text-green-400';
+        let catColor = act.cat === 'Físico' ? 'text-red-400' : act.cat === 'ERPG' ? 'text-purple-300' : act.cat === 'Defesa' ? 'text-sky-300' : 'text-[#bfa888]';
         tbody.innerHTML += `
-            <tr class="hover:bg-gold/10 transition-colors border-b border-gold/5">
+            <tr class="hover:bg-[#141416]/70 transition-colors border-b border-[#bfa888]/15">
                 <td class="py-3 pr-2 align-top">
-                    <div class="font-bold text-gray-200">${act.name}</div>
-                    <div class="text-[10px] ${catColor} uppercase mt-1 tracking-wider">${act.cat}</div>
+                    <div class="font-bold text-xs text-[#ede3d2]">${escapeHTML(act.name)}</div>
+                    <div class="text-[9px] ${catColor} uppercase mt-1 tracking-wider font-mono">${escapeHTML(act.cat)}</div>
                 </td>
-                <td class="py-3 pr-2 text-purple-300 font-bold align-top">${act.effect}</td>
-                <td class="py-3 pr-2 text-gray-400 text-xs align-top">${act.cost}</td>
-                <td class="py-3 text-gray-400 text-xs align-top leading-relaxed">${act.desc}</td>
+                <td class="py-3 pr-2 text-[#bfa888] font-bold align-top text-xs font-mono">${escapeHTML(act.effect)}</td>
+                <td class="py-3 pr-2 text-[#a89f91] text-xs align-top font-mono">${escapeHTML(act.cost)}</td>
+                <td class="py-3 text-[#a89f91] text-xs align-top leading-relaxed italic ">${escapeHTML(act.desc)}</td>
             </tr>
         `;
     });
@@ -2440,141 +4958,104 @@ loadData();
 // --- SISTEMA DE DANO DO MESTRE ---
 
 window.updateMasterDamageUI = function() {
-    // 1. Custom input visibility
-    const aSelect = document.getElementById('inp-dmg-attack');
-    const c = document.getElementById('inp-dmg-custom');
-    if(aSelect.value.includes('+') || aSelect.value.includes('Arma') || aSelect.value === 'custom') {
-        c.classList.remove('hidden');
-        c.placeholder = aSelect.value === 'custom' ? 'Digite o Dano (Ex: 10 ou 2d6)' : 'Apenas o valor puro do dado (Ex: 6)';
-    } else {
-        c.classList.add('hidden');
-    }
-    
-    // 2. Auto-fill Body Part based on Attack Name
-    const bpSelect = document.getElementById('inp-dmg-bodypart');
-    if (bpSelect && aSelect.value !== 'custom') {
-        const n = aSelect.options[aSelect.selectedIndex].text.toLowerCase();
-        let bp = 'Geral';
-        if (n.includes('soco') || n.includes('adaga') || n.includes('toque') || n.includes('apalpar') || n.includes('masturbação') || n.includes('encontrão') || n.includes('arremesso') || n.includes('brinquedos')) bp = 'Toque/Mãos';
-        else if (n.includes('chute') || n.includes('perna')) bp = 'Pés/Pernas';
-        else if (n.includes('beijo') || n.includes('oral') || n.includes('verbal')) bp = 'Lábios/Fala';
-        else if (n.includes('penetração') || n.includes('cavalgada') || n.includes('montaria') || n.includes('fricção')) bp = 'Dotação / Membro';
-        
-        bpSelect.value = bp;
+    const sSelect = document.getElementById('inp-dmg-source');
+    const diceDiv = document.getElementById('dmg-manual-dice');
+    if (sSelect && diceDiv) {
+        if (sSelect.value === 'custom') {
+            diceDiv.classList.remove('hidden');
+        } else {
+            diceDiv.classList.add('hidden');
+        }
     }
 };
 
-document.getElementById('btn-master-damage').addEventListener('click', () => {
-    const tSelect = document.getElementById('inp-dmg-target');
-    const aSelectAttr = document.getElementById('inp-dmg-attacker');
-    tSelect.innerHTML = '';
-    aSelectAttr.innerHTML = '<option value="">Nenhum / Ambiente</option>';
-    
-    // Add change listener to update weapons if not already added
-    if (!aSelectAttr.dataset.listenerAdded) {
-        aSelectAttr.addEventListener('change', (e) => {
-            window.populateAttackerWeapons(e.target.value);
-            window.updateMasterDamageUI();
-        });
-        aSelectAttr.dataset.listenerAdded = "true";
-    }
-    
-    combatState.combatants.forEach(c => {
-        const optT = document.createElement('option');
-        optT.value = c.cid;
-        optT.innerText = c.name + (c.isMonster ? ' (Monstro)' : ' (Personagem)');
-        tSelect.appendChild(optT);
+const btnMasterDmg = document.getElementById('btn-master-damage');
+if (btnMasterDmg) {
+    btnMasterDmg.addEventListener('click', () => {
+        const tSelect = document.getElementById('inp-dmg-target');
+        const aSelectAttr = document.getElementById('inp-dmg-attacker');
+        if (!tSelect || !aSelectAttr) return;
+        tSelect.innerHTML = '';
+        aSelectAttr.innerHTML = '<option value="">Nenhum / Ambiente / Nevii</option>';
         
-        const optA = document.createElement('option');
-        optA.value = c.cid;
-        optA.innerText = c.name + (c.isMonster ? ' (Monstro)' : ' (Personagem)');
-        aSelectAttr.appendChild(optA);
+        if (!aSelectAttr.dataset.listenerAdded) {
+            aSelectAttr.addEventListener('change', (e) => {
+                window.populateAttackerWeapons(e.target.value);
+                window.updateMasterDamageUI();
+            });
+            aSelectAttr.dataset.listenerAdded = "true";
+        }
+        
+        combatState.combatants.forEach(c => {
+            const optT = document.createElement('option');
+            optT.value = c.cid;
+            optT.innerText = c.name + (c.isMonster ? ' [Criatura]' : ' [Expedicionário]');
+            tSelect.appendChild(optT);
+            
+            const optA = document.createElement('option');
+            optA.value = c.cid;
+            optA.innerText = c.name + (c.isMonster ? ' [Criatura]' : ' [Expedicionário]');
+            aSelectAttr.appendChild(optA);
+        });
+        
+        // Auto-select target: prefer an expedicionário if attacker is monster
+        if (combatState.selectedTargetCid && combatState.combatants.some(c => c.cid === combatState.selectedTargetCid)) {
+            tSelect.value = combatState.selectedTargetCid;
+        } else if (combatState.combatants.length > 0) {
+            tSelect.value = combatState.combatants[0].cid;
+        }
+        
+        window.populateAttackerWeapons('');
+        window.updateMasterDamageUI();
+        
+        const dmgModal = document.getElementById('modal-apply-damage');
+        if (dmgModal) dmgModal.showModal();
     });
-    
-    // Auto-select first target if available
-    if(combatState.combatants.length > 0) tSelect.value = combatState.combatants[0].cid;
-    
-    window.populateAttackerWeapons('');
-    
-    document.getElementById('inp-dmg-custom').classList.remove('hidden');
-    document.getElementById('inp-dmg-custom').placeholder = "Digite o Dano (Ex: 10 ou 2d6)";
-    document.getElementById('inp-dmg-custom').value = '';
-    
-    window.updateMasterDamageUI();
-    document.getElementById('modal-apply-damage').showModal();
-});
+}
 
 window.populateAttackerWeapons = function(cid) {
-    const aSelect = document.getElementById('inp-dmg-attack');
-    let weaponGroup = '';
+    const sSelect = document.getElementById('inp-dmg-source');
+    if (!sSelect) return;
+    let weaponGroup = '<option value="custom">Rolagem Manual (Personalizada)</option>';
     
     if (cid) {
         let combatant = combatState.combatants.find(c => c.cid === cid);
-        if (combatant && !combatant.isMonster) {
-            let char = characters.find(c => c.id === combatant.refId);
-            if (char && char.equipment) {
-                let equippedWeapons = [];
-                ['hand_1', 'hand_2'].forEach(slot => {
-                    if (char.equipment[slot]) {
-                        let wp = globalWeapons.find(w => w.id === char.equipment[slot]);
-                        if (wp && !equippedWeapons.find(ew => ew.id === wp.id)) {
-                            equippedWeapons.push(wp);
+        if (combatant) {
+            if (!combatant.isMonster) {
+                let char = characters.find(c => c.id === combatant.refId);
+                if (char && char.equipment) {
+                    let equippedWeapons = [];
+                    ['hand_1', 'hand_2'].forEach(slot => {
+                        if (char.equipment[slot]) {
+                            let wp = globalWeapons.find(w => w.id === char.equipment[slot]);
+                            if (wp && !equippedWeapons.find(ew => ew.id === wp.id)) {
+                                equippedWeapons.push(wp);
+                            }
                         }
-                    }
-                });
-                
-                if (equippedWeapons.length > 0) {
-                    weaponGroup = `<optgroup label="Armas Equipadas">`;
-                    equippedWeapons.forEach(wp => {
-                        let dmgStr = `${wp.diceCount}d${wp.diceFaces}`;
-                        if (wp.dmgMod > 0) dmgStr += `+${wp.dmgMod}`;
-                        else if (wp.dmgMod < 0) dmgStr += `${wp.dmgMod}`;
-                        weaponGroup += `<option value="weapon:${wp.id}">Atacar com ${wp.name} (${dmgStr}) [Dur: ${wp.durability}/${wp.maxDurability}]</option>`;
                     });
-                    weaponGroup += `</optgroup>`;
+                    
+                    if (equippedWeapons.length > 0) {
+                        weaponGroup += `<optgroup label="Armas Equipadas">`;
+                        equippedWeapons.forEach(wp => {
+                            let dmgStr = `${wp.diceCount}d${wp.diceFaces}`;
+                            if (wp.dmgMod > 0) dmgStr += `+${wp.dmgMod}`;
+                            else if (wp.dmgMod < 0) dmgStr += `${wp.dmgMod}`;
+                            weaponGroup += `<option value="weapon:${wp.id}">Atacar com ${escapeHTML(wp.name)} (${dmgStr})</option>`;
+                        });
+                        weaponGroup += `</optgroup>`;
+                    }
                 }
+            } else {
+                weaponGroup += `<optgroup label="Golpes de Nevii / Criatura">
+                    <option value="1d6+2">Garras de Tinta (1d6+2)</option>
+                    <option value="2d6+4">Investida Brutal de Nevii (2d6+4)</option>
+                    <option value="2d8+3">Pincelada Corrompida (2d8+3)</option>
+                </optgroup>`;
             }
         }
     }
-
-    aSelect.innerHTML = weaponGroup + `
-        <optgroup label="Genéricos (Cálculo Automático)">
-            <option value="1d4">Ataque Leve / Fricção (1d4)</option>
-            <option value="1d6">Ataque Médio / Magia (1d6)</option>
-            <option value="1d8">Ataque Pesado (1d8)</option>
-            <option value="1d10">Magia Forte (1d10)</option>
-            <option value="2d6">Golpe Brutal (2d6)</option>
-        </optgroup>
-        <optgroup label="Ações Físicas (Mestre joga os dados e insere)">
-            <option value="1d4 + FOR">Soco Simples / Chute Rápido (1d4 + FOR)</option>
-            <option value="1d8 + FOR">Golpe Pesado (1d8 + FOR)</option>
-            <option value="2d4 + FOR">Arremesso de Corpo (2d4 + FOR)</option>
-            <option value="1d6 + FOR">Encontrão / Investida (1d6 + FOR)</option>
-            <option value="1d4 + FOR">Golpe Baixo (1d4 + FOR)</option>
-            <option value="1d10 + AGI">Ataque Furtivo / Adaga (1d10 + AGI)</option>
-        </optgroup>
-        <optgroup label="Ataques Mágicos (Mestre joga os dados e insere)">
-            <option value="1d6 + MIS">Raio Mágico Básico (1d6 + MIS)</option>
-            <option value="2d6 + MIS">Bola de Fogo / Explosão (2d6 + MIS)</option>
-            <option value="1d8 + MIS">Magia Guiada (1d8 + MIS)</option>
-            <option value="1d10 + MIS">Magia Pesada / Ritual (1d10 + MIS)</option>
-            <option value="1d4 + MIS">Ataque Mágico Furtivo (1d4 + MIS)</option>
-        </optgroup>
-        <optgroup label="Ações ERPG (Mestre joga os dados e insere)">
-            <option value="1d4 + SED">Toque Sensível (1d4 + SED)</option>
-            <option value="1d6 + MAX(SED, FOR)">Apalpar com Força (1d6 + SED/FOR)</option>
-            <option value="1d6 + MAX(SED, MIS)">Beijo Intenso (1d6 + SED/MIS)</option>
-            <option value="1d8 + SED">Sexo Oral / Masturbação (1d8 + SED)</option>
-            <option value="2d6 + SED">Penetração Frontal (2d6 + SED)</option>
-            <option value="1d8 + MAX(FOR, SED)">Penetração Forçada (1d8 + FOR/SED)</option>
-            <option value="2d6 + AGI">Montaria / Cavalgada (2d6 + AGI)</option>
-            <option value="1d10 + SED">Brinquedos/Itens (1d10 + SED)</option>
-            <option value="1d4 + SED">Provocação Verbal (1d4 + SED)</option>
-        </optgroup>
-        <optgroup label="Personalizado">
-            <option value="custom" selected>Ataque Livre / Customizado</option>
-        </optgroup>
-    `;
+    sSelect.innerHTML = weaponGroup;
+    window.updateMasterDamageUI();
 };
 
 window.getAttackTags = function(attackName) {
@@ -2666,21 +5147,24 @@ window.parsePerkBuffs = function(char, dmgType, isAttacker, attackBodyPart = 'Ge
         }
     };
 
-    Object.keys(char.perks).forEach(attr => {
-        if (!PERKS_DB[attr]) return;
-        Object.keys(char.perks[attr]).forEach(pName => {
-            let lvl = char.perks[attr][pName];
-            if (lvl > 0) {
-                const perkDef = PERKS_DB[attr].perks[pName];
-                if (!perkDef) return; 
-                
-                const pText = perkDef[lvl - 1];
-                if (!pText) return;
-                
-                parseText(pText, pName);
-            }
+    if (char.perks && typeof PERKS_DB !== 'undefined' && PERKS_DB) {
+        Object.keys(char.perks).forEach(rawAttr => {
+            const attr = (rawAttr === 'con' || rawAttr === 'vig') ? 'vit' : (rawAttr === 'von' ? 'per' : ((rawAttr === 'sed' || rawAttr === 'mis') ? 'chr' : rawAttr));
+            if (!PERKS_DB[attr] || !PERKS_DB[attr].perks) return;
+            Object.keys(char.perks[rawAttr] || {}).forEach(pName => {
+                let lvl = char.perks[rawAttr][pName];
+                if (lvl > 0) {
+                    const perkDef = PERKS_DB[attr].perks[pName];
+                    if (!perkDef) return; 
+                    
+                    const pText = perkDef[lvl - 1];
+                    if (!pText) return;
+                    
+                    parseText(pText, pName);
+                }
+            });
         });
-    });
+    }
     
     return buff;
 };
@@ -2724,41 +5208,20 @@ document.getElementById('btn-dmg-confirm').addEventListener('click', () => {
             return;
         }
 
-        let baseAttackStr = document.getElementById('inp-dmg-attack').value;
-        let expr = baseAttackStr;
+        let srcVal = document.getElementById('inp-dmg-source')?.value || 'custom';
+        let diceC = parseInt(document.getElementById('inp-dmg-dice-c')?.value) || 1;
+        let diceF = parseInt(document.getElementById('inp-dmg-dice-f')?.value) || 8;
+        let expr = `${diceC}d${diceF}`;
         let weaponToDegrade = null;
         
-        if (baseAttackStr.startsWith('weapon:')) {
-            let wpId = baseAttackStr.split(':')[1];
+        if (srcVal && srcVal.startsWith('weapon:')) {
+            let wpId = srcVal.split(':')[1];
             let wp = globalWeapons.find(w => w.id === wpId);
             if (wp) {
                 weaponToDegrade = wp;
                 expr = `${wp.diceCount}d${wp.diceFaces}`;
                 if (wp.dmgMod > 0) expr += `+${wp.dmgMod}`;
                 else if (wp.dmgMod < 0) expr += `${wp.dmgMod}`;
-                // add + FOR if it's melee for automatic calculation (optional, handled by master mostly)
-                // Actually the master will just type the total damage in the custom field usually
-            }
-        }
-
-        const customInp = document.getElementById('inp-dmg-custom');
-        
-        if(!customInp.classList.contains('hidden')) {
-            let typedVal = customInp.value.trim();
-            if(typedVal !== '') {
-                if (baseAttackStr === 'custom') {
-                    expr = typedVal;
-                } else {
-                    let plusIdx = baseAttackStr.indexOf('+');
-                    if (plusIdx !== -1) {
-                        expr = typedVal + ' ' + baseAttackStr.substring(plusIdx);
-                    } else {
-                        expr = typedVal;
-                    }
-                }
-            } else {
-                alert("Por favor, digite o dano final rolado no campo customizado!");
-                return;
             }
         }
 
@@ -2785,7 +5248,7 @@ document.getElementById('btn-dmg-confirm').addEventListener('click', () => {
         }
 
         const dmgType = document.getElementById('inp-dmg-type').value;
-        const cond = document.getElementById('inp-dmg-cond').value;
+        const cond = document.getElementById('inp-dmg-cond')?.value || 'normal';
         const mod = parseInt(document.getElementById('inp-dmg-mod').value) || 0;
         const targetZone = document.getElementById('inp-dmg-target-zone')?.value || 'Qualquer';
 
@@ -2795,6 +5258,8 @@ document.getElementById('btn-dmg-confirm').addEventListener('click', () => {
 
         if(cond === 'vantagem') baseDano = Math.max(r1, r2);
         else if(cond === 'desvantagem') baseDano = Math.min(r1, r2);
+        const isCrit = document.getElementById('inp-dmg-crit')?.checked;
+        if (isCrit) baseDano *= 2;
 
         // --- AUTOMATED PERKS SYSTEM ---
         const attackBodyPart = document.getElementById('inp-dmg-bodypart')?.value || 'Geral';
@@ -3070,6 +5535,61 @@ document.getElementById('btn-dmg-confirm').addEventListener('click', () => {
         console.error(err);
     }
 });
+
+const btnDmgIncoming = document.getElementById('btn-dmg-incoming');
+if (btnDmgIncoming) {
+    btnDmgIncoming.addEventListener('click', () => {
+        try {
+            const targetCid = document.getElementById('inp-dmg-target').value;
+            const target = combatState.combatants.find(c => c.cid === targetCid);
+            if(!target) {
+                alert("Alvo não encontrado!");
+                return;
+            }
+
+            const attackerCid = document.getElementById('inp-dmg-attacker').value;
+            let attacker = combatState.combatants.find(c => c.cid === attackerCid);
+            if (!attacker) {
+                attacker = {
+                    cid: 'env_' + Date.now(),
+                    name: 'Inimigo / Ameaça',
+                    isMonster: true,
+                    avatar: '',
+                    stamina: 100
+                };
+            }
+
+            let srcVal = document.getElementById('inp-dmg-source')?.value || 'custom';
+            let diceC = parseInt(document.getElementById('inp-dmg-dice-c')?.value) || 1;
+            let diceF = parseInt(document.getElementById('inp-dmg-dice-f')?.value) || 8;
+            let expr = `${diceC}d${diceF}`;
+
+            if (srcVal && srcVal.startsWith('weapon:')) {
+                let wpId = srcVal.split(':')[1];
+                let wp = globalWeapons.find(w => w.id === wpId);
+                if (wp) expr = `${wp.diceCount}d${wp.diceFaces}`;
+            }
+
+            let rollDmg = rollDiceExpr(expr);
+            if (isNaN(rollDmg) || rollDmg < 1) rollDmg = Math.floor(Math.random() * 8) + 4;
+            const isCrit = document.getElementById('inp-dmg-crit')?.checked;
+            if (isCrit) rollDmg *= 2;
+            if (isNaN(rollDmg) || rollDmg < 1) rollDmg = Math.floor(Math.random() * 8) + 4;
+            let mod = parseInt(document.getElementById('inp-dmg-mod').value) || 0;
+            let finalHpDmg = Math.max(1, rollDmg + mod);
+            let postureDmg = Math.max(2, Math.floor(finalHpDmg / 2) + 2);
+            let hitRoll = Math.floor(Math.random() * 20) + 1 + (attacker.attr?.for || 2);
+
+            const dmgType = document.getElementById('inp-dmg-type').value;
+
+            document.getElementById('modal-apply-damage').close();
+            appendCombatLog(`⚡ <strong>${escapeHTML(attacker.name)}</strong> preparou uma investida contra <strong>${escapeHTML(target.name)}</strong>! Aguardando reação...`, 'attack');
+            window.triggerIncomingAttack(attacker, target, hitRoll, finalHpDmg, postureDmg, 'Ataque Declarado', dmgType);
+        } catch(err) {
+            alert("Erro ao disparar ataque iminente: " + err.message);
+        }
+    });
+}
 
 function populateDropdowns() {
     const raceSelect = document.getElementById('inp-race');

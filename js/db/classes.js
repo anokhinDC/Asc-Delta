@@ -1,253 +1,217 @@
 const CLASS_TEMPLATES = {
-    "Artífice": {
-        baseStats: { hp: 110, st: 120, lust: 90, en: 30 },
-        attrMods: { agi: 3, vig: 2 },
+    "Engenheiro da Expedição": {
+        baseStats: { hp: 120, st: 120, lust: 120, en: 30 },
+        attrMods: { for: 3, vit: 2 },
         skills: [
             {
-                name: "Ligação Passada",
-                type: "Passiva",
-                cost: "-",
-                test: "-",
-                desc: "Enquanto para alguns as tecnologias esquecidas são como runas mágicas, os artífices conseguem compreender e se ligar com a antiga tecnologia humana. Recebe +2 em testes contra criaturas eletrônicas e é capaz de reunir seus pedaços para criação de itens e outros robôs."
+                name: "Impacto de Sobrecarga (Overcharge)",
+                type: "Ativa",
+                cost: "1 PA + 2 Chroma",
+                test: "Força vs Defesa",
+                desc: "Libera a pressão mecânica de seu braço/arma. Causa 2d8 + Força de dano físico e aplica 8 de dano direto na Postura do alvo (Ruptura rápida de Guarda)."
             },
             {
-                name: "Pequeno Eu",
+                name: "Manutenção Tática",
                 type: "Ativa",
-                cost: "50 turnos",
+                cost: "1 PA",
                 test: "-",
-                desc: "É possível criar criaturas e objetos com funções específicas a partir de 5 pedaços eletrônicos, com o valor aumentando conforme a complexidade, não precisando de ferramentas específicas. Usando uma bancada especializada, o Artíficie pode aprimorar equipamentos."
+                desc: "Restaura 20 de Postura de si mesmo ou de um aliado adjacente, reforçando as placas de proteção contra golpes iminentes."
             }
         ],
         weaknesses: [
             {
-                name: "Descrente",
-                desc: "Os artífices acreditam que a energia sexual é apenas um tipo de energia ainda não explicado pela física... Eles não sabem que estão errados. Recebem 10% de dano extra de qualquer fonte mágica."
+                name: "Superaquecimento Mecânico",
+                desc: "Se usar Overcharge 2 turnos seguidos, seu braço mecânico trava por 1 turno, impedindo reações de Aparar."
             },
             {
-                name: "Curiosidade Penitente",
-                desc: "Quando vêem um pedaço de tecnologia jamais visto, como uma criatura diferente, são obrigados a interagir com ela."
-            }
-        ]
-    },
-    "Necromante": {
-        baseStats: { hp: 70, st: 50, lust: 120, en: 90 },
-        attrMods: { mis: 3, von: 2 },
-        skills: [
-            {
-                name: "Coleta de Almas",
-                type: "Passiva",
-                cost: "-",
-                test: "-",
-                desc: "Ao derrotar ou participar da derrota de um inimigo, a sua alma ficará a mercê do Necromante para ser coletada. Ao fazer isso, ele pode utilizar este mesmo inimigo derrotado para compor o seu próprio Exército Morto-Vivo, preservando suas características e habilidades. (Invocar essa criatura gasta a mesma quantidade de stamina que a mesma possuía em energia sexual)."
-            },
-            {
-                name: "Exército Morto-Vivo",
-                type: "Ativa",
-                cost: "Variável (Magia)",
-                test: "Misticismo",
-                desc: "Invoca 1 a 3 mortos-vivos para lutarem em seu lugar. O gasto em Energia Sexual é proporcional ao tipo e quantidade.\nOs mortos-vivos possuem 50% dos status do necromante e turno próprio. Podem ser usados para Ações de Alívio, permitindo ao Necromante compartilhar as sensações e benefícios."
-            }
-        ],
-        weaknesses: [
-            {
-                name: "Dependência",
-                desc: "Fraco sem seu exército. Requer posição recuada. Não pode usar armaduras pesadas e recebe +20% de toda fonte de dano físico."
-            },
-            {
-                name: "Tempo de Espera",
-                desc: "Criaturas invocadas demoram 1 turno para saírem da terra e ficarem prontas para combate."
-            }
-        ]
-    },
-    "Caçador": {
-        baseStats: { hp: 110, st: 110, lust: 120, en: 35 },
-        attrMods: { agi: 3, con: 2 },
-        skills: [
-            {
-                name: "Munição Adaptável",
-                type: "Ativa",
-                cost: "2 Energia Sexual (Opcional)",
-                test: "Agilidade",
-                desc: "Pode utilizar munição tradicional (2d8 de dano físico) ou Munição de Energia Sexual (dano direto na LUST). Se em contato próximo, o dano na LUST passa de 2d8 para 3d6. Tipo de munição deve ser selecionado antes do disparo."
-            },
-            {
-                name: "Camuflagem do Predador",
-                type: "Ativa",
-                cost: "-",
-                test: "Agilidade",
-                desc: "Fica camuflado por 2 turnos. Recebe +2 em testes de furtividade e rastreamento. O efeito acaba ao realizar ataque direto. (Cooldown: 4 turnos)"
-            }
-        ],
-        weaknesses: [
-            {
-                name: "Ambiente Aberto",
-                desc: "Em áreas completamente abertas, não recebe o benefício da Camuflagem e sofre -2 em furtividade."
-            },
-            {
-                name: "Combate Mental",
-                desc: "Treinamento puramente físico. Recebe -2 em testes de resistência mental (manipulação, confusão, etc)."
+                name: "Mobilidade Comprometida",
+                desc: "Equipamentos pesados causam -2 em jogadas de Esquiva pura."
             }
         ]
     },
 
-    "Sacerdote": {
-        class: "Sacerdote",
-        attrMods: { mis: 3, von: 2 },
-        baseStats: { hp: 90, st: 90, en: 50, lust: 120, ecstasy: 20 },
-        conditions: ["fragil_fisico", "fragil_sexual"],
-        skillsToCreate: [
-            { name: "Mente Consagrada", type: "Passiva", cost: "Passivo", test: "-", effect: "+5 na Defesa de Lust. Sempre que realiza ação de alívio, reduz 10 LUST do aliado mais afetado.", classRestricted: "Sacerdote" },
-            { name: "Rito de Expulsão", type: "Mágica", cost: "Cooldown 3", test: "Misticismo vs DF", effect: "Requer fluidos. Aliado: Cura 15+Misticismo. Inimigo: Converte LUST em Energia Sexual (Max 3x Misticismo).", classRestricted: "Sacerdote" }
-        ]
-    },
-    "Curandeiro": {
-        class: "Curandeiro",
-        attrMods: { mis: 3, sed: 2 },
-        baseStats: { hp: 80, st: 90, en: 55, lust: 130, ecstasy: 25 },
-        conditions: [],
-        skillsToCreate: [
-            { name: "Corpo Curativo", type: "Mágica", cost: "Cooldown 3", test: "-", effect: "Cura 1d8 no toque ou 2d8 penetrando.", classRestricted: "Curandeiro" },
-            { name: "Confecção de Poções de Cura", type: "Habilidade", cost: "3 min", test: "-", effect: "Requer masturbação/orgasmo. Faz 2 poções pequenas (1d8 HP) ou 1 grande (2d6 HP) de sêmen.", classRestricted: "Curandeiro" },
-            { name: "Fraqueza: Canalização Íntima", type: "Passiva", cost: "Passivo", test: "-", effect: "Cura requer contato íntimo ininterrupto. Não pode conjurar feitiços durante a cura. Para cada 2 HP curado, recebe 1 LUST. Inimigos que beberem sêmen curam 2d3 HP.", classRestricted: "Curandeiro" }
-        ]
-    },
-    "Oferenda": {
-        class: "Oferenda",
-        attrMods: { con: 3, von: 2 },
-        baseStats: { hp: 120, st: 75, en: 50, lust: 135, ecstasy: 25 },
-        conditions: [],
-        skillsToCreate: [
-            { name: "Marionete", type: "Passiva", cost: "Passivo", test: "-", effect: "Sempre sob Bondage. Patrono escolhe descanso: Edging, Submissão (obriga Foca em mim!, -10% LUST/VON para a skill), ou Vínculo (Dobro HP Base, Dano sofrido=LUST).", classRestricted: "Oferenda" },
-            { name: "Foca em mim!", type: "Ativa", cost: "1 Ação", test: "Vontade CD 14", effect: "Corpo vulnerável torna-se irresistível. Obriga o alvo a focar a Oferenda como objetivo principal.", classRestricted: "Oferenda" },
-            { name: "Fraqueza: Corpo e Mente Cativa", type: "Passiva", cost: "Passivo", test: "-", effect: "Amarras alteram conforme o patrono. Impossível livrar-se. Sem aliados no combate, rende-se imediatamente.", classRestricted: "Oferenda" }
-        ]
-    },
-    "Bulwark": {
-        baseStats: { hp: 200, st: 50, lust: 130, en: 30 },
-        attrMods: { for: 1, von: 1, agi: -2 },
+    "Esgrimista de Lumière": {
+        baseStats: { hp: 100, st: 140, lust: 100, en: 40 },
+        attrMods: { agi: 3, per: 2 },
         skills: [
             {
-                name: "Égide de Defesa",
-                type: "Passiva",
-                desc: "+3 Defesa GERAL. Aumenta defesa física, Constituição e sexual."
+                name: "Aparo Perfeito (Riposte)",
+                type: "Reativa",
+                cost: "1 PA",
+                test: "Percepção / Agilidade vs Ataque",
+                desc: "Ao sofrer um ataque corpo-a-corpo ou projétil, tenta aparar no instante exato. Em caso de sucesso, anula o dano, não acumula dano de Postura e contra-ataca imediatamente com 1d10 + Agilidade de dano."
             },
             {
-                name: "Vanguarda",
-                type: "Passiva",
-                desc: "Em equipe, os tanques se tornam mais INTRÉPIDOS, ganhando +2 em dano de força e +2 em redução de dano físico, dando passivamente para seus aliados também resistência."
-            },
-            {
-                name: "TERREMOTO!",
+                name: "Estocada de Chroma",
                 type: "Ativa",
-                cost: "10 turnos",
-                test: "-",
-                desc: "O tanque pode e consegue com um PISAR PESADO no chão tremer tudo a sua frente, atordoando e deixando vulneravel TODOS OS ALVOS (até mesmo aliados se estiverem no caminho.) por pelo menos 2 turnos, reduzindo em -2 a agilidade dos mesmos."
+                cost: "1 PA + 3 Chroma",
+                test: "Agilidade vs Defesa",
+                desc: "Avança com a ponta da lâmina tingida em Chroma. Ignora a Armadura Física do alvo e causa dano direto de Tinta."
+            }
+        ],
+        weaknesses: [
+            {
+                name: "Corpo Leve",
+                desc: "Não suporta impactos esmagadores. Ataques de dano contundente bruto causam +3 de dano na Postura da Esgrimista."
+            },
+            {
+                name: "Dependência de Ritmo",
+                desc: "Se errar uma tentativa de Aparar, fica Vulnerável até o próximo turno."
+            }
+        ]
+    },
+
+    "Pintor Místico": {
+        baseStats: { hp: 90, st: 100, lust: 90, en: 70 },
+        attrMods: { chr: 3, per: 2 },
+        skills: [
+            {
+                name: "Mancha Elemental de Chroma",
+                type: "Ativa",
+                cost: "1 PA + 4 Chroma",
+                test: "Chroma vs Defesa",
+                desc: "Pinta o ar com pigmentos de fogo ou gelo. Causa 3d6 + Chroma de dano elemental e mancha o alvo com Corrupção de Tinta por 2 turnos."
+            },
+            {
+                name: "Pintura Restauradora",
+                type: "Ativa",
+                cost: "1 PA + 5 Chroma",
+                test: "Chroma",
+                desc: "Restaura 2d8 + Chroma de HP de um aliado e limpa todas as condições de dano contínuo da tela de vida dele."
+            }
+        ],
+        weaknesses: [
+            {
+                name: "Foco Frágil",
+                desc: "Ao ser atingido enquanto conjura, deve passar em teste de Vitalidade ou o Picto é cancelado e o Chroma é perdido."
+            },
+            {
+                name: "Consumo Voraz de Tinta",
+                desc: "Se ficar com 0 de Chroma, sofre -2 em todas as suas jogadas até recarregar."
+            }
+        ]
+    },
+
+    "Atirador da Névoa": {
+        baseStats: { hp: 100, st: 120, lust: 100, en: 45 },
+        attrMods: { per: 3, agi: 2 },
+        skills: [
+            {
+                name: "Tiro no Ponto Fraco",
+                type: "Ativa",
+                cost: "1 PA + 2 Chroma",
+                test: "Percepção vs Esquiva",
+                desc: "Dispara com mira telescópica em uma fenda de tinta do inimigo. Causa 2d10 + Percepção de dano e dobra o dano de Postura se o alvo estiver com Guarda Quebrada."
+            },
+            {
+                name: "Disparo de Cobertura",
+                type: "Reativa",
+                cost: "1 PA",
+                test: "Percepção",
+                desc: "Interrompe um ataque inimigo direcionado a um aliado à distância, reduzindo o acerto do agressor em -4."
+            }
+        ],
+        weaknesses: [
+            {
+                name: "Desvantagem Corpo-a-Corpo",
+                desc: "Inimigos engajados em alcance corpo-a-corpo impõem -3 nas rolagens de ataque do atirador."
+            },
+            {
+                name: "Munição de Precisão",
+                desc: "Errar dois tiros seguidos obriga a gastar 1 turno inteiro de recarga e ajuste de mira."
+            }
+        ]
+    },
+
+    "Guardião do Monólito": {
+        baseStats: { hp: 140, st: 110, lust: 150, en: 25 },
+        attrMods: { vit: 3, for: 2 },
+        skills: [
+            {
+                name: "Muralha de Lumière",
+                type: "Reativa",
+                cost: "1 PA",
+                test: "Vitalidade vs Dano",
+                desc: "Ergue um escudo pesado. Reduz todo dano recebido em 50% e absorve até 20 de dano na Postura sem sofrer Stagger."
+            },
+            {
+                name: "Golpe de Escudo Esmagador",
+                type: "Ativa",
+                cost: "1 PA",
+                test: "Força vs Defesa",
+                desc: "Golpeia com o escudo. Causa 1d8 + Força e empurra o alvo, adicionando 10 de dano de Postura."
             }
         ],
         weaknesses: [
             {
                 name: "Lentidão",
-                desc: "Os tanques apesar de grandes e fortes, são lentos demais . . . Recebem -2 em esquiva."
+                desc: "O mais lento da expedição. -3 em Iniciativa e Esquiva."
             },
             {
-                name: "Matilha",
-                desc: "Naturalmente os tanques possuem um vinculo de proteção para com aqueles que ele se preocupa, sacrificando-se sempre que seu sacrifício significar a possibilidade de salvar um companheiro."
+                name: "Fardo do Protetor",
+                desc: "Sempre que um aliado adjacente sofrer dano letal, o Guardião recebe metade desse dano automaticamente."
             }
         ]
     },
-    "Jester": {
-        baseStats: { hp: 75, st: 100, lust: 150, en: 60 },
-        attrMods: { sed: 3, agi: 2 },
-        skillsToCreate: [
+
+    "Vanguarda Berserk": {
+        baseStats: { hp: 130, st: 130, lust: 110, en: 30 },
+        attrMods: { for: 3, agi: 2 },
+        skills: [
             {
-                name: "Carta Oculta",
-                type: "Passiva",
-                cost: "-",
-                test: "Sedução vs Vontade",
-                desc: "O Jester atrai completamente o olhar do alvo através de um teste de Sedução. Em sucesso contra a Vontade dele, escolhe uma parte do corpo para prender a atenção. O alvo não percebe adequadamente ações ao redor. O Jester trata suas ações contra o alvo como surpresa, recebendo bônus igual à diferença do teste em suas aplicações de dano, e o alvo sofre -2 em Esquiva/Defesa exclusivamente contra ele. Críticos aumentam o bônus em 10% e reduzem o valor necessário para crítico em 1. Dano acumulado igual ou superior ao resultado da Sedução desperta o alvo e concede a ele um turno adicional.",
-                classRestricted: "Jester"
-            },
-            {
-                name: "Microdança",
-                type: "Passiva",
-                cost: "-",
-                test: "-",
-                desc: "Os micro-movimentos constantes da Jester irradiam tensão sexual. Enquanto sob Carta Oculta (ou realizando ações de Sedução), o alvo sofre 1d4 + metade do modificador de SED no início de cada turno. Em crítico de Sedução ou ataque beneficiado pela Carta Oculta: o alvo recebe +2 de LUST, adquire Vulnerabilidade Erótica por 1 rodadas (efeitos de Sedução aumentam 30%) e a Jester recupera 2 ponto de Energia Sexual.",
-                classRestricted: "Jester"
-            }
-        ],
-        weaknesses: [
-            {
-                name: "Corpo Exposto",
-                desc: "O estilo provocativo e a necessidade de ser vista reduzem a capacidade de se esconder. O Jester sofre -3 em testes de Furtividade e é sempre o primeiro a ser notado em situações de atenção coletiva."
-            },
-            {
-                name: "Dependência de Atenção",
-                desc: "Se passar 3 turnos consecutivos sem causar dano sexual a alguém ela começa a ficar ansiosa e impaciente recebendo -3 em testes de vontade."
-            }
-        ]
-    },
-    "Berserk": {
-        baseStats: { hp: 120, st: 110, lust: 120, en: 30 },
-        attrMods: { vig: 3, sed: 2 },
-        skillsToCreate: [
-            {
-                name: "Frenesi",
-                type: "Passiva",
-                cost: "-",
-                test: "-",
-                desc: "Ao entrar em estado de fúria, o Berserk aumenta sua pressão ofensiva, o efetivo é ativado em 2 etapas, em 30% de perca de hp ou em 30% de dano lust, o efeito pode variar entre +3 de dano físico se o usuário escolher, ou em +3 de dano lust se escolher o lust. ( Dura por 3 turnos, se renovando a cada 30% )",
-                classRestricted: "Berserk"
-            },
-            {
-                name: "Gemido provocativo",
+                name: "Frenesi da Expedição",
                 type: "Ativa",
-                cost: "5 turnos",
+                cost: "1 PA",
                 test: "-",
-                desc: "Esse gemido tem efeito na cama, no combate e na inspiração dos aliados, o usuário pode usar isso para inspirar seus companheiros em um combate, dandolhes +1 no próximo teste, ou pode ser usado para causar 2d8 de dano lust em um alvo que estiver a penetrando ou a fazendo sentir prazer, um contra ataque muito eficaz.",
-                classRestricted: "Berserk"
+                desc: "Ao perder 30% do HP ou da Postura, entra em Frenesi por 3 turnos: recebe +4 de dano físico e causa +5 de dano de Postura em cada golpe."
+            },
+            {
+                name: "Golpe Destruidor de Guarda",
+                type: "Ativa",
+                cost: "2 PA",
+                test: "Força vs Defesa",
+                desc: "Um golpe violento com as duas mãos. Se o alvo tentar bloquear, sofre o dobro de dano de Postura."
             }
         ],
         weaknesses: [
             {
-                name: "Defesa Exposta",
-                desc: "Por concentrar-se completamente no ataque, o Berserk sofre -2 em Defesa Física e Defesa de LUST enquanto estiver em Frenesi."
+                name: "Defesa Aberta",
+                desc: "Enquanto em Frenesi, sofre -2 de Defesa Física e não pode usar manobras de bloqueio cuidadoso."
             },
             {
-                name: "Movimentos Previsíveis",
-                desc: "Se permanecer em Frenesi por mais de 4 turnos seguidos, seus movimentos tornam-se previsíveis, recebendo -2 em Agilidade."
+                name: "Desgaste Acelerado",
+                desc: "Se o combate durar mais de 4 turnos, o cansaço acumula, perdendo 1 PA por turno."
             }
         ]
     },
-    "Franco golpeador": {
+
+    "Franco Golpeador": {
         baseStats: { hp: 120, st: 150, lust: 100, en: 45 },
         attrMods: { for: 2, agi: 3 },
         skills: [
             {
-                name: "Aparar",
+                name: "Aparar em Cadeia",
                 type: "Ativa",
                 cost: "3 turnos",
-                test: "-",
-                desc: "Quando se trata de bater de frente e dominar o avanço, golpeadores são profissionais. Caso a ação seja focada em executar a famigerada ação dita como 'parry', receberá um bônus de +3, o bônus esse que se repete caso a guarda do inimigo não seja quebrada na primeira ação, porém, diminuindo a cada repetição.",
-                classRestricted: "Franco golpeador"
+                test: "Agilidade vs Ataque",
+                desc: "Especialista em quebrar o ritmo adversário. Recebe +3 em testes de Parry. A cada contra-ataque bem sucedido, prepara o próximo aparo com facilidade."
             },
             {
-                name: "My pretty girl",
+                name: "Arma Assinatura",
                 type: "Passiva",
                 cost: "-",
                 test: "-",
-                desc: "Todo golpeador, mesmo com a enorme versatilidade no uso de armas, sempre tem sua favorita. Ao usar a arma que carrega esse título, tanto sua ativa quanto o bônus de força e velocidade da classe ganham +1, além de, em quesito narrativo, tornar o portador dessa classe bem mais imprevisível de se lidar. Em contra parte, sua arma favorita deve ser uma habilidade assinatura, não apenas um mero equipamento.",
-                classRestricted: "Franco golpeador"
+                desc: "Ao empunhar sua arma favorita da Expedição, ganha +1 em Força, +1 em Agilidade e seus golpes se tornam imprevisíveis para os Nevii."
             }
         ],
         weaknesses: [
             {
-                name: "Ai minha artrite",
-                desc: "No que se focam em bater e correr, são péssimos em realmente aguentar golpes. Classes portadoras de uma força bruta superior a sua podem facilmente ganhar destes com até um único golpe, demonstrando apenas meras chances de sobrevivência caso seja um ataque perfurante ou cortante. ( -3 em resistência física )"
+                name: "Fragilidade a Impacto Pesado",
+                desc: "Inimigos com força bruta superior quebram facilmente sua sequência de golpes. -3 de resistência contra dano contundente."
             },
             {
-                name: "Faminto",
-                desc: "Acabam sendo a classe mais brigona e inconsequente, não existindo a possibilidade de clicar no botão de diálogo. Se uma intriga ocorre, propõem uma luta. Se uma pessoa está sendo difícil de se persuadir, já puxam uma faca. Se não tiver alguém para segurar um golpeador, ele também não vai se segurar."
+                name: "Impulsividade",
+                desc: "Incapaz de recuar ou hesitar diante de ameaças. Não pode realizar ações de fuga voluntária."
             }
         ]
     }
