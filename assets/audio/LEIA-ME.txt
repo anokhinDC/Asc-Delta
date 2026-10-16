@@ -1,0 +1,4 @@
+Coloque aqui a música de fundo com o nome tema.m4a (ou .mp3).
+
+Para usar outro nome, ou mais de uma faixa, edite a lista FAIXAS no
+começo de assets/js/musica.js. As faixas tocam em sequência e repetem.
