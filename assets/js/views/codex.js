@@ -64,7 +64,7 @@
 
           <section id="cx-perfeicoes">
             <div class="eyebrow">IV</div><h2>Perfeições e Compasso</h2>
-            <p>Toda habilidade custa de 2 a 6 de Lúmia, e cada ponto gasto permite mais 1 perfeição: uma habilidade de custo 4 tem de 2 a 4 perfeições ${pips(6, 4)}, escolhidas na criação. Supremas custam 7 a 9 e têm 6 perfeições.</p>
+            <p>Toda habilidade custa de 2 a 6 de Lúmia, e cada ponto gasto permite mais 1 perfeição: uma habilidade de custo 4 tem de 2 a 4 perfeições ${pips(6, 4)}, escolhidas na criação.</p>
             <p>A zona de dano sobe com o custo: <span class="kbd">Dano = Base × (1 + 0,1 × (custo − 2) + 0,25 a cada 2 perfeições certas)</span>. Custo 2 vai de 100% a 125% da Base, e custo 6 de 140% a 215%. O crítico soma +50%. Em área, o multiplicador vale metade. Errar tudo ainda acerta, com o dano de um Ataque Comum.</p>
             <p>O Compasso: o bot sorteia 2 números por perfeição (1 a 5). A forma (abaixo) é sorteada pelo bot a cada Compasso, e ele diz como responder. O jogador responde dentro do tempo. Cada 2 números certos formam 1 perfeição certa.</p>
             <table class="tbl">${LD.FORMAS.map((f) => `<tr><td class="serif" style="font-size:18px">${f.nome}</td><td>${f.regra}</td><td class="muted">${f.ex}</td></tr>`).join('')}</table>

@@ -96,10 +96,10 @@
           ${field('Foco em Quebra', select('foco', [{ key: '0', nome: 'Nenhum · dano pleno' }, { key: '1', nome: '1 · −15% de dano, +1 de Quebra' }, { key: '2', nome: '2 · −30% de dano, +2 de Quebra' }, { key: '3', nome: '3 · −45% de dano, +3 de Quebra' }], String(h.foco || 0)), 'Menos dano em volta da Base da Via libera mais Quebra.')}
           ${field('Quebra', input('quebra', h.quebra, 'type="number" min="0" max="7"'), 'Máximo: metade do custo (para cima) + o foco.')}
         </div>
-        <div class="row" style="align-items:end">
+        ${h.suprema ? `<div class="row" style="align-items:end">
           <div class="field">${checkbox('suprema', h.suprema, 'Suprema (6 perfeições, efeito único)')}</div>
           ${field('Custo da Suprema (7 a 9)', input('custoSuprema', h.custoSuprema, 'type="number" min="7" max="9"'))}
-        </div>
+        </div>` : ''}
 
         <div class="subsect"><span>Efeitos</span></div>
         <div class="caps" style="margin-bottom:8px">Efeitos no meio do caminho (acontecem se o jogador acertar até aquela perfeição)</div>
