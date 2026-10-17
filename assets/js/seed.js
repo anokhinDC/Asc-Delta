@@ -64,7 +64,7 @@
     },
     {
       id: 'seed_hab_criar', nome: 'Criar', via: 'eng', elemento: 'luz', tipo: 'suporte', alvo: 'si',
-      perfeicoes: 2, custo: 1, forma: 'direto', quebra: 0,
+      perfeicoes: 2, custo: 2, forma: 'direto', quebra: 0,
       porPerfeicao: [],
       perfeita: 'A criação dura 1 turno a mais, ou o Abrigo absorve o dobro.',
       tags: ['Exige o giz', 'Custa uma Lacuna'],

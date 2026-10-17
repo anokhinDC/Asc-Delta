@@ -262,7 +262,18 @@
   function custoHabilidade(h) {
     if (h.suprema) return clamp(num(h.custoSuprema, 7), 7, 9);
     // Habilidades antigas não têm custo próprio: valia o número de perfeições.
-    return clamp(num(h.custo != null && h.custo !== '' ? h.custo : h.perfeicoes, 1), 1, 6);
+    return clamp(num(h.custo != null && h.custo !== '' ? h.custo : h.perfeicoes, 2), 2, 6);
+  }
+
+  // Cada ponto de Lúmia gasto permite mais 1 perfeição: de 2 até o custo.
+  function perfeicoesDe(h) {
+    if (h.suprema) return 6;
+    return clamp(num(h.perfeicoes, 2), 2, custoHabilidade(h));
+  }
+
+  // Piso da zona de dano (em × Base): 100% com custo 2, +10% por ponto de Lúmia a mais.
+  function pisoDeDano(h) {
+    return 1 + 0.1 * (custoHabilidade(h) - 2);
   }
 
   function ehArea(h) {
@@ -270,14 +281,14 @@
     return !!(a && a.area);
   }
 
-  // Cada 2 perfeições certas dão +25% de dano. Habilidade em área vale metade.
+  // Zona de dano: do piso (custo) até o piso + 25% a cada 2 perfeições certas. Área vale metade.
   function bonusPerfeicoes(h, alcancadas) {
     const k = clamp(Math.floor(num(alcancadas)), 0, perfeicoesDe(h));
     return 0.25 * Math.floor(k / 2);
   }
 
   function multiplicador(h, alcancadas) {
-    const m = 1 + bonusPerfeicoes(h, alcancadas);
+    const m = pisoDeDano(h) + bonusPerfeicoes(h, alcancadas);
     return ehArea(h) ? m / 2 : m;
   }
 
@@ -285,10 +296,6 @@
     if (h.suprema) return 25;
     if (perfeicoesDe(h) >= 5) return 10;
     return 1;
-  }
-
-  function perfeicoesDe(h) {
-    return h.suprema ? 6 : clamp(num(h.perfeicoes, 2), 2, 6);
   }
 
   function tabelaHabilidade(h, base) {
@@ -439,7 +446,7 @@
     rules: {
       pontosTotais, pontosGastos, novoStatus, lumiaMaxima, pontosDeEco, aprendizados,
       derivados, validarStatus,
-      custoHabilidade, multiplicador, nivelMinimo, perfeicoesDe, tabelaHabilidade, ehArea,
+      custoHabilidade, pisoDeDano, multiplicador, nivelMinimo, perfeicoesDe, tabelaHabilidade, ehArea,
       pontosQuebra, referencia, analiseMonstro,
       multResistencia, calcularDano, danoRecebido,
       xpParaNivel, nivelPorXp, xpDaFicha, progressoXp, xpDeInimigo

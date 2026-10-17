@@ -64,8 +64,8 @@
 
           <section id="cx-perfeicoes">
             <div class="eyebrow">IV</div><h2>Perfeições e Compasso</h2>
-            <p>Toda habilidade tem de 2 a 6 perfeições ${pips(6, 4)}, escolhidas na criação. O custo em Lúmia é separado e vai de 1 a 6. Supremas custam 7 a 9 e têm 6 perfeições.</p>
-            <p><span class="kbd">Dano = Base × (1 + 0,25 a cada 2 perfeições certas)</span>. O crítico soma +50%. Em área, o multiplicador vale metade. Errar tudo ainda acerta, com o dano de um Ataque Comum.</p>
+            <p>Toda habilidade custa de 2 a 6 de Lúmia, e cada ponto gasto permite mais 1 perfeição: uma habilidade de custo 4 tem de 2 a 4 perfeições ${pips(6, 4)}, escolhidas na criação. Supremas custam 7 a 9 e têm 6 perfeições.</p>
+            <p>A zona de dano sobe com o custo: <span class="kbd">Dano = Base × (1 + 0,1 × (custo − 2) + 0,25 a cada 2 perfeições certas)</span>. Custo 2 vai de 100% a 125% da Base, e custo 6 de 140% a 215%. O crítico soma +50%. Em área, o multiplicador vale metade. Errar tudo ainda acerta, com o dano de um Ataque Comum.</p>
             <p>O Compasso: o bot sorteia 2 números por perfeição (1 a 5). O jogador responde na forma da habilidade, dentro do tempo. Cada 2 números certos formam 1 perfeição certa.</p>
             <table class="tbl">${LD.FORMAS.map((f) => `<tr><td class="serif" style="font-size:18px">${f.nome}</td><td>${f.regra}</td><td class="muted">${f.ex}</td></tr>`).join('')}</table>
             <p>Ao vivo, o narrador conta batidas, uma mensagem curta (<span class="kbd">·</span>) por batida: perfeições + 1, mais as batidas extras da Agilidade. A resposta precisa aparecer antes da última. Sem jogo ao vivo, o Compasso vira Pulso: um d6 por perfeição, cada 3+ conta, até o primeiro 1 ou 2.</p>
