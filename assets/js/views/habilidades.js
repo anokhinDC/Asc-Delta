@@ -5,6 +5,9 @@
 
   const filtros = { q: '', via: 'todas', perf: 'todas' };
 
+  // A prévia usa uma Base de exemplo: de 1 a 700 (a Base do nível 40 passa pouco de 500).
+  function baseDaPrevia(v) { return LD.clamp(Number(v) || 0, 1, 700); }
+
   function nomeVia(k) { const v = LD.byKey(LD.VIAS, k); return v ? v.nome : '—'; }
 
   function card(h) {
@@ -64,10 +67,11 @@
     if (h && !podeEditar) {
       LD.ui.openDrawer({
         eyebrow: 'Habilidade', title: h.nome,
-        body: `<div class="field"><label>Prévia com a Base</label><input type="number" data-base value="74"></div><div data-leitura>${leitura(h, 74)}</div>`,
+        body: `<div class="field"><label>Prévia com a Base</label><input type="number" data-base min="1" max="700" value="88"></div><div data-leitura>${leitura(h, 88)}</div>`,
         onMount: (el) => {
           const b = el.querySelector('[data-base]');
-          b.addEventListener('input', () => { el.querySelector('[data-leitura]').innerHTML = leitura(h, Number(b.value) || 0); });
+          b.addEventListener('change', () => { b.value = baseDaPrevia(b.value); });
+          b.addEventListener('input', () => { el.querySelector('[data-leitura]').innerHTML = leitura(h, baseDaPrevia(b.value)); });
         }
       });
       return;
@@ -113,7 +117,7 @@
         ${field('Origem', input('origem', h.origem, 'placeholder="Quem ensinou, de onde veio"'))}
       </form>
       <div class="subsect"><span>Prévia</span></div>
-      <div class="field"><label>Base da Via para a prévia</label><input type="number" data-base value="${opts.base || 74}" data-skip></div>
+      <div class="field"><label>Base da Via para a prévia</label><input type="number" data-base min="1" max="700" value="${opts.base || 88}" data-skip></div>
       <div data-preview></div>`;
 
     const foot = `
@@ -135,10 +139,11 @@
         const preview = () => {
           const d = LD.ui.readForm(form);
           const tmp = Object.assign({}, h, d);
-          el.querySelector('[data-preview]').innerHTML = leitura(tmp, Number(el.querySelector('[data-base]').value) || 0);
+          el.querySelector('[data-preview]').innerHTML = leitura(tmp, baseDaPrevia(el.querySelector('[data-base]').value));
         };
         form.addEventListener('input', preview);
         el.querySelector('[data-base]').addEventListener('input', preview);
+        el.querySelector('[data-base]').addEventListener('change', (e) => { e.target.value = baseDaPrevia(e.target.value); preview(); });
         preview();
         el.querySelector('[data-cancel]').addEventListener('click', LD.ui.closeDrawer);
         const del = el.querySelector('[data-del]');
@@ -158,7 +163,7 @@
           out.custoSuprema = LD.clamp(Number(out.custoSuprema) || 7, 7, 9);
           out.tags = String(d.tagsTxt || '').split(',').map((s) => s.trim()).filter(Boolean);
           delete out.tagsTxt;
-          out.porPerfeicao = pp.read().filter((p) => p.texto).map((p) => ({ n: LD.clamp(Number(p.n) || 1, 1, 6), texto: p.texto }));
+          out.porPerfeicao = pp.read().filter((p) => p.texto).map((p) => ({ n: LD.clamp(Number(p.n) || 1, 1, out.perfeicoes), texto: p.texto }));
           LD.store.save('habilidades', out).then((saved) => {
             LD.ui.closeDrawer();
             LD.ui.toast('Habilidade gravada.');
