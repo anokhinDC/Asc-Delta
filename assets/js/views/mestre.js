@@ -26,23 +26,23 @@
 
     let base, mult = 1, elemento, quebra = 0, rotulo;
     if (st.acao === 'habilidade' && h) {
-      base = d ? d.bases[h.via] : Number(st.baseManual) || 0;
+      base = d ? d.bases[h.via] : LD.clamp(Number(st.baseManual) || 0, 0, 700);
       const n = R.perfeicoesDe(h);
       const k = Math.min(st.perf, n);
       mult = R.multiplicador(h, k);
       elemento = h.elemento;
-      quebra = (Number(h.quebra) || 0);
+      quebra = R.quebraDe(h);
       rotulo = `${h.nome} · ${k}/${n} perfeições`;
     } else if (st.acao === 'disparo') {
-      base = d ? d.bases.mir : Number(st.baseManual) || 0;
+      base = d ? d.bases.mir : LD.clamp(Number(st.baseManual) || 0, 0, 700);
       elemento = st.elemManual;
       quebra = st.fraco > 1 ? 1 : 0;
       rotulo = 'Disparo (Mira Livre)';
     } else {
       const arma = d && d.arma;
-      base = d ? d.bases[arma ? arma.via : 'gol'] : Number(st.baseManual) || 0;
+      base = d ? d.bases[arma ? arma.via : 'gol'] : LD.clamp(Number(st.baseManual) || 0, 0, 700);
       elemento = arma ? arma.elemento : st.elemManual;
-      quebra = 1 + (arma ? Number(arma.quebra) || 0 : 0);
+      quebra = 1 + (arma ? LD.clamp(Number(arma.quebra) || 0, 0, R.LIMITE_QUEBRA_ARMA) : 0);
       rotulo = 'Ataque Comum' + (arma ? ' · ' + arma.nome : '');
     }
     if (st.fraco > 1 && st.acao !== 'disparo') quebra += 1;
@@ -90,7 +90,7 @@
           <div class="panel-title"><h3>Ascensor → Inimigo</h3><span class="caps">dano causado</span></div>
           <div class="row">
             <div class="field"><label>Atacante</label><select data-k="atacante">${opt(chars, st.atacante, (x) => x.nome, 'Manual (Base digitada)')}</select></div>
-            ${!A.c ? `<div class="field"><label>Base</label><input type="number" data-k="baseManual" value="${esc(st.baseManual)}"></div>` : ''}
+            ${!A.c ? `<div class="field"><label>Base</label><input type="number" data-k="baseManual" min="0" max="700" value="${esc(st.baseManual)}"></div>` : ''}
           </div>
           <div class="chips" style="margin-bottom:14px">${[['comum', 'Ataque Comum'], ['habilidade', 'Habilidade'], ['disparo', 'Disparo']]
             .map(([k, n]) => `<button class="chip ${st.acao === k ? 'on' : ''}" data-acao="${k}">${n}</button>`).join('')}</div>

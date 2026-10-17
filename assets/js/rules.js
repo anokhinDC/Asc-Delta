@@ -164,6 +164,11 @@
     return STATUS.reduce((s, st) => s + num(status[st.key], 1), 0);
   }
 
+  // Tetos razoáveis para o que o mestre digita em pictos e armas.
+  const LIMITE_BONUS = { pv: 300, velocidade: 10, reducao: 10, critico: 10, gol: 30, mir: 30, ele: 30, res: 30, eng: 30 };
+  const LIMITE_PODER = 60;
+  const LIMITE_QUEBRA_ARMA = 2;
+
   function novoStatus() {
     const s = {};
     STATUS.forEach((st) => (s[st.key] = 1));
@@ -196,7 +201,7 @@
     (char.pictosEquipados || []).forEach((id) => {
       const p = lib.pictos.find((x) => x.id === id);
       if (!p || !p.bonus) return;
-      Object.keys(b).forEach((k) => (b[k] += num(p.bonus[k])));
+      Object.keys(b).forEach((k) => (b[k] += clamp(num(p.bonus[k]), -LIMITE_BONUS[k], LIMITE_BONUS[k])));
     });
     const arma = lib.armas.find((a) => a.id === char.armaId);
     return { bonus: b, arma };
@@ -211,7 +216,7 @@
     const bases = {};
     VIAS.forEach((v) => {
       let b = 5 * N + 7 * num(s[v.key], 1) + num(bonus[v.key]);
-      if (arma && arma.via === v.key) b += num(arma.poder);
+      if (arma && arma.via === v.key) b += clamp(num(arma.poder), 0, LIMITE_PODER);
       bases[v.key] = b;
     });
 
@@ -271,6 +276,20 @@
     return clamp(num(h.perfeicoes, 2), 2, custoHabilidade(h));
   }
 
+  // Foco em Quebra: cada nível tira 15% do dano e libera +1 de Quebra (de 0 a 3).
+  function focoDe(h) {
+    return clamp(Math.floor(num(h.foco)), 0, 3);
+  }
+
+  // Quebra máxima: metade do custo (arredondada para cima) mais o foco. Vai de 1 a 7.
+  function quebraMaxima(h) {
+    return Math.ceil(custoHabilidade(h) / 2) + focoDe(h);
+  }
+
+  function quebraDe(h) {
+    return clamp(Math.floor(num(h.quebra)), 0, quebraMaxima(h));
+  }
+
   // Piso da zona de dano (em × Base): 100% com custo 2, +10% por ponto de Lúmia a mais.
   function pisoDeDano(h) {
     return 1 + 0.1 * (custoHabilidade(h) - 2);
@@ -288,7 +307,7 @@
   }
 
   function multiplicador(h, alcancadas) {
-    const m = pisoDeDano(h) + bonusPerfeicoes(h, alcancadas);
+    const m = (pisoDeDano(h) + bonusPerfeicoes(h, alcancadas)) * (1 - 0.15 * focoDe(h));
     return ehArea(h) ? m / 2 : m;
   }
 
@@ -446,7 +465,7 @@
     rules: {
       pontosTotais, pontosGastos, novoStatus, lumiaMaxima, pontosDeEco, aprendizados,
       derivados, validarStatus,
-      custoHabilidade, pisoDeDano, multiplicador, nivelMinimo, perfeicoesDe, tabelaHabilidade, ehArea,
+      custoHabilidade, pisoDeDano, focoDe, quebraMaxima, quebraDe, LIMITE_BONUS, LIMITE_PODER, LIMITE_QUEBRA_ARMA, multiplicador, nivelMinimo, perfeicoesDe, tabelaHabilidade, ehArea,
       pontosQuebra, referencia, analiseMonstro,
       multResistencia, calcularDano, danoRecebido,
       xpParaNivel, nivelPorXp, xpDaFicha, progressoXp, xpDeInimigo

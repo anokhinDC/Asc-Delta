@@ -34,13 +34,13 @@
     form: (p) => `
       ${field('Nome', input('nome', p.nome, 'class="big" placeholder="Nome do picto"'))}
       <div class="subsect"><span>Bônus de Status</span></div>
-      <div class="row">${LD.PICTO_BONUS.map((k) => field(k.nome, input('bonus.' + k.key, (p.bonus || {})[k.key] || '', 'type="number"'))).join('')}</div>
+      <div class="row">${LD.PICTO_BONUS.map((k) => field(k.nome, input('bonus.' + k.key, (p.bonus || {})[k.key] || '', `type="number" min="-${LD.rules.LIMITE_BONUS[k.key]}" max="${LD.rules.LIMITE_BONUS[k.key]}"`), 'No máximo ' + LD.rules.LIMITE_BONUS[k.key] + '.')).join('')}</div>
       <div class="subsect"><span>Efeito</span></div>
       ${field('Efeito passivo', textarea('efeito', p.efeito))}
       ${field('Custo como Eco', input('custoEco', p.custoEco, 'type="number" min="0" max="20"'), 'Pontos de Eco para usar o efeito sem equipar o picto, depois de dominado.')}
       ${field('Descrição', textarea('descricao', p.descricao))}
       ${field('Origem', input('origem', p.origem))}`,
-    ajustar: (p) => { Object.keys(p.bonus || {}).forEach((k) => { p.bonus[k] = Number(p.bonus[k]) || 0; if (!p.bonus[k]) delete p.bonus[k]; }); p.custoEco = Number(p.custoEco) || 0; }
+    ajustar: (p) => { Object.keys(p.bonus || {}).forEach((k) => { p.bonus[k] = LD.clamp(Number(p.bonus[k]) || 0, -LD.rules.LIMITE_BONUS[k], LD.rules.LIMITE_BONUS[k]); if (!p.bonus[k]) delete p.bonus[k]; }); p.custoEco = Number(p.custoEco) || 0; }
   };
 
   /* ---------------- Armas ---------------- */
@@ -66,8 +66,8 @@
       <div class="row">
         ${field('Via', select('via', LD.VIAS.map((v) => ({ key: v.key, nome: v.nome })), a.via))}
         ${field('Elemento do Ataque Comum', select('elemento', LD.ELEMENTOS, a.elemento))}
-        ${field('Poder', input('poder', a.poder, 'type="number"'), 'Somado à Base da Via de quem empunha.')}
-        ${field('Quebra extra', input('quebra', a.quebra, 'type="number" min="0"'))}
+        ${field('Poder', input('poder', a.poder, 'type="number" min="0" max="60"'), 'Somado à Base da Via de quem empunha. No máximo 60.')}
+        ${field('Quebra extra', input('quebra', a.quebra, 'type="number" min="0" max="2"'), 'No máximo 2.')}
       </div>
       <div class="subsect"><span>Passivas por nível</span></div>
       <div class="list-edit" data-list="passivas"></div>
@@ -75,7 +75,7 @@
       ${field('Descrição', textarea('descricao', a.descricao))}
       ${field('Origem', input('origem', a.origem))}`,
     listas: { passivas: (r) => `<div style="display:grid;grid-template-columns:110px 1fr;gap:12px"><div class="field" style="margin:0"><label>Nível</label>${LD.ui.lf('nivel', r.nivel || 1, 'type="number" min="1"')}</div><div class="field" style="margin:0"><label>Efeito</label>${LD.ui.lf('texto', r.texto)}</div></div>` },
-    ajustar: (a) => { a.poder = Number(a.poder) || 0; a.quebra = Number(a.quebra) || 0; a.passivas = (a.passivas || []).filter((p) => p.texto); }
+    ajustar: (a) => { a.poder = LD.clamp(Number(a.poder) || 0, 0, LD.rules.LIMITE_PODER); a.quebra = LD.clamp(Number(a.quebra) || 0, 0, LD.rules.LIMITE_QUEBRA_ARMA); a.passivas = (a.passivas || []).filter((p) => p.texto); }
   };
 
   /* ---------------- Itens ---------------- */

@@ -50,7 +50,7 @@
       <div style="margin-top:18px">
         ${(h.porPerfeicao || []).filter((p) => p && p.texto).map((p) => `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps">Na ${esc(p.n)}ª</span><span>${esc(p.texto)}</span></div>`).join('')}
         ${h.perfeita ? `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps" style="color:var(--accent-2)">Perfeita</span><span>${esc(h.perfeita)} <span class="muted">· devolve 1 Lúmia</span></span></div>` : ''}
-        ${h.quebra ? `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps">Quebra</span><span>+${esc(h.quebra)}</span></div>` : ''}
+        ${R.quebraDe(h) ? `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps">Quebra</span><span>+${esc(R.quebraDe(h))}${R.focoDe(h) ? ` · foco ${R.focoDe(h)} (−${R.focoDe(h) * 15}% de dano)` : ''}</span></div>` : ''}
         ${(h.tags || []).length ? `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps">Notas</span><span>${(h.tags || []).map(esc).join(' · ')}</span></div>` : ''}
         ${minimo > 1 ? `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps">Requisito</span><span>Nível ${minimo} ou mais</span></div>` : ''}
         ${h.origem ? `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps">Origem</span><span>${esc(h.origem)}</span></div>` : ''}
@@ -93,7 +93,8 @@
         <div class="row">
           ${field('Custo em Lúmia (2 a 6)', input('custo', h.custo, 'type="number" min="2" max="6"'), 'Quanto mais Lúmia, maior a zona de dano: piso de 100% + 10% por ponto acima de 2.')}
           ${field('Perfeições (2 até o custo)', input('perfeicoes', h.perfeicoes, 'type="number" min="2" max="6"'), 'Cada ponto de Lúmia permite +1 perfeição. O Compasso tem 2 números por perfeição, e cada 2 perfeições certas dão +25%.')}
-          ${field('Quebra', input('quebra', h.quebra, 'type="number" min="0" max="6"'))}
+          ${field('Foco em Quebra', select('foco', [{ key: '0', nome: 'Nenhum · dano pleno' }, { key: '1', nome: '1 · −15% de dano, +1 de Quebra' }, { key: '2', nome: '2 · −30% de dano, +2 de Quebra' }, { key: '3', nome: '3 · −45% de dano, +3 de Quebra' }], String(h.foco || 0)), 'Menos dano em volta da Base da Via libera mais Quebra.')}
+          ${field('Quebra', input('quebra', h.quebra, 'type="number" min="0" max="7"'), 'Máximo: metade do custo (para cima) + o foco.')}
         </div>
         <div class="row" style="align-items:end">
           <div class="field">${checkbox('suprema', h.suprema, 'Suprema (6 perfeições, efeito único)')}</div>
@@ -151,6 +152,8 @@
           const out = Object.assign(h, d);
           out.custo = LD.clamp(Number(out.custo) || 2, 2, 6);
           out.perfeicoes = LD.clamp(Number(out.perfeicoes) || 2, 2, out.custo);
+          out.foco = LD.clamp(Number(out.foco) || 0, 0, 3);
+          out.quebra = LD.clamp(Math.floor(Number(out.quebra) || 0), 0, R.quebraMaxima(out));
           if (out.suprema) out.perfeicoes = 6;
           out.custoSuprema = LD.clamp(Number(out.custoSuprema) || 7, 7, 9);
           out.tags = String(d.tagsTxt || '').split(',').map((s) => s.trim()).filter(Boolean);
