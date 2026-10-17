@@ -104,8 +104,7 @@
           ${field('Custo em Lúmia (2 a 6)', input('custo', h.custo, 'type="number" min="2" max="6"'), 'Quanto mais Lúmia, maior a zona de dano: piso de 100% + 10% por ponto acima de 2.')}
           ${field('Perfeições (2 até o custo)', input('perfeicoes', h.perfeicoes, 'type="number" min="2" max="6"'), 'Cada ponto de Lúmia permite +1 perfeição. O Compasso tem 2 números por perfeição, e cada 2 perfeições certas dão +25%.')}
           ${field('Efeitos extras', select('efeitos', [{ key: '0', nome: 'Nenhum' }, { key: '1', nome: '1 · −10% de dano' }, { key: '2', nome: '2 · −20% de dano' }, { key: '3', nome: '3 · −30% de dano' }], String(h.efeitos || 0)), 'Condição, segundo alvo, área, escudo extra. Cada efeito custa dano.')}
-          ${LD.store.isMaster() ? field('Ajuste do mestre', select('ajusteMestre', [-20, -15, -10, -5, 0, 5, 10, 15, 20].map((v) => ({ key: String(v), nome: (v > 0 ? '+' : '') + v + '% de dano' })), String(h.ajusteMestre || 0)), 'Só o mestre mexe. De −20% a +20%.') : ''}
-          ${field('Foco em Quebra', select('foco', [{ key: '0', nome: 'Nenhum · dano pleno' }, { key: '1', nome: '1 · −15% de dano, +1 de Quebra' }, { key: '2', nome: '2 · −30% de dano, +2 de Quebra' }, { key: '3', nome: '3 · −45% de dano, +3 de Quebra' }], String(h.foco || 0)), 'Menos dano em volta da Base da Via libera mais Quebra.')}
+          ${field('Foco em Quebra', select('foco', [{ key: '0', nome: 'Nenhum · dano pleno' }, { key: '1', nome: '1 · −15% de dano, +1 de Quebra' }, { key: '2', nome: '2 · −30% de dano, +2 de Quebra' }, { key: '3', nome: '3 · −45% de dano, +3 de Quebra' }], String(h.foco || 0)), 'Menos dano libera mais Quebras.')}
           ${field('Quebra', input('quebra', h.quebra, 'type="number" min="0" max="7"'), 'Máximo: metade do custo (para cima) + o foco.')}
         </div>
         ${h.suprema ? `<div class="row" style="align-items:end">
@@ -167,7 +166,6 @@
           out.perfeicoes = LD.clamp(Number(out.perfeicoes) || 2, 2, out.custo);
           out.foco = LD.clamp(Number(out.foco) || 0, 0, 3);
           out.efeitos = LD.clamp(Number(out.efeitos) || 0, 0, 3);
-          out.ajusteMestre = LD.store.isMaster() ? LD.clamp(Math.round((Number(out.ajusteMestre) || 0) / 5) * 5, -20, 20) : (Number(h.ajusteMestre) || 0);
           out.quebra = LD.clamp(Math.floor(Number(out.quebra) || 0), 0, R.quebraMaxima(out));
           if (out.suprema) out.perfeicoes = 6;
           out.custoSuprema = LD.clamp(Number(out.custoSuprema) || 7, 7, 9);

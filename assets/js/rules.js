@@ -295,11 +295,6 @@
     return clamp(Math.floor(num(h.efeitos)), 0, 3);
   }
 
-  // Ajuste do mestre sobre o dano pré-calculado: de -20% a +20%, de 5 em 5.
-  function ajusteDoMestre(h) {
-    return clamp(Math.round(num(h.ajusteMestre) / 5) * 5, -20, 20) / 100;
-  }
-
   // Parte do dano que foi trocada por Quebra e por efeitos. Nunca passa de 60%.
   function reducaoDeDano(h) {
     return Math.min(0.6, 0.15 * focoDe(h) + 0.1 * efeitosDe(h));
@@ -322,7 +317,7 @@
   }
 
   function multiplicador(h, alcancadas) {
-    const m = (pisoDeDano(h) + bonusPerfeicoes(h, alcancadas)) * (1 - reducaoDeDano(h)) * (1 + ajusteDoMestre(h));
+    const m = (pisoDeDano(h) + bonusPerfeicoes(h, alcancadas)) * (1 - reducaoDeDano(h));
     return ehArea(h) ? m / 2 : m;
   }
 
@@ -480,7 +475,7 @@
     rules: {
       pontosTotais, pontosGastos, novoStatus, lumiaMaxima, pontosDeEco, aprendizados,
       derivados, validarStatus,
-      custoHabilidade, pisoDeDano, focoDe, efeitosDe, ajusteDoMestre, reducaoDeDano, quebraMaxima, quebraDe, LIMITE_BONUS, LIMITE_PODER, LIMITE_QUEBRA_ARMA, multiplicador, nivelMinimo, perfeicoesDe, tabelaHabilidade, ehArea,
+      custoHabilidade, pisoDeDano, focoDe, efeitosDe, reducaoDeDano, quebraMaxima, quebraDe, LIMITE_BONUS, LIMITE_PODER, LIMITE_QUEBRA_ARMA, multiplicador, nivelMinimo, perfeicoesDe, tabelaHabilidade, ehArea,
       pontosQuebra, referencia, analiseMonstro,
       multResistencia, calcularDano, danoRecebido,
       xpParaNivel, nivelPorXp, xpDaFicha, progressoXp, xpDeInimigo
