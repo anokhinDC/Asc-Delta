@@ -12,7 +12,7 @@
   function novaFicha() {
     const s = R.novoStatus();
     return {
-      nome: 'Novo Ascensor', jogador: '', conceito: '', lumiaTipo: 'Barreira', nivel: 1, retrato: '',
+      nome: 'Novo Ascensor', jogador: '', conceito: '', lumiaTipo: 'Barreira', nivel: 1, xp: 0, retrato: '',
       status: s, pvAtual: null, lumiaAtual: 2,
       armaId: '', habilidades: [], habilidadesEquipadas: [],
       pictosPossuidos: [], pictosEquipados: [], dominio: {}, ecos: [], cristaisEco: 0,
@@ -114,7 +114,7 @@
               <div style="margin-top:10px">${lumiaBar(c.lumiaAtual, d.lumiaMax, pode)}</div>
               ${pode ? `<div class="vital-ctrl"><button class="btn plain" data-lu="-1">− 1</button><button class="btn plain" data-lu="1">+ 1</button><button class="btn plain" data-lu="max">Cheia</button></div>` : ''}
             </div>
-            <div class="vital"><div class="caps">Velocidade</div><div class="v">${d.velocidade}</div></div>
+            <div class="vital"><div class="caps">Velocidade</div><div class="v">${d.velocidade}</div><div class="muted" style="font-size:12px">Compasso: ${Math.max(1, Math.floor(LD.num(c.status && c.status.agi, 1) / 2))} s</div></div>
             <div class="vital"><div class="caps">Redução</div><div class="v">${d.reducao}<small>%</small></div><div class="muted" style="font-size:12px">Aguentar: ${Math.min(60, d.reducao * 2)}%</div></div>
             <div class="vital"><div class="caps">Crítico</div><div class="v">${d.critico}<small>%</small></div><div class="muted" style="font-size:12px">d100 ≤ ${d.critico}</div></div>
             <div class="vital"><div class="caps">Instinto</div><div class="v">${d.instinto}</div><div class="muted" style="font-size:12px">+${d.batidas} batida${d.batidas === 1 ? '' : 's'} na Janela</div></div>
@@ -122,6 +122,7 @@
         </div>
       </section>
 
+      ${blocoXp(c, pode)}
       <nav class="tabs">${[['status', 'Status'], ['habilidades', 'Habilidades'], ['equipamento', 'Arma e Pictos'], ['inventario', 'Inventário'], ['diario', 'Diário']]
         .map(([k, n]) => `<button class="${aba === k ? 'on' : ''}" data-aba="${k}">${n}</button>`).join('')}</nav>
       <section data-tab></section>`;
@@ -130,6 +131,15 @@
     const ident = main.querySelector('[data-ident]');
     if (ident) ident.addEventListener('click', () => identidade(c, () => renderFicha(main, id)));
 
+    main.querySelectorAll('[data-xp]').forEach((b) => b.addEventListener('click', () => {
+      const v = Math.floor(Number(main.querySelector('[data-xpd]').value) || 0);
+      if (!v) return;
+      const antes = c.nivel;
+      c.xp = Math.max(0, R.xpDaFicha(c) + (b.dataset.xp === '+' ? v : -v));
+      c.nivel = Math.max(antes, R.nivelPorXp(c.xp));
+      if (c.nivel > antes) LD.ui.toast(`${c.nome} subiu para o nível ${c.nivel}: +${3 * (c.nivel - antes)} pontos de Status para distribuir.`);
+      redesenhar();
+    }));
     main.querySelectorAll('[data-pv]').forEach((b) => b.addEventListener('click', () => {
       const v = Number(main.querySelector('[data-pvd]').value) || 0;
       if (b.dataset.pv === 'max') c.pvAtual = d.pvMax;
@@ -159,6 +169,17 @@
     ({ status: abaStatus, habilidades: abaHabilidades, equipamento: abaEquipamento, inventario: abaInventario, diario: abaDiario })[aba](tab, c, d, pode, { salvar, salvarDepois, redesenhar });
   }
 
+  function blocoXp(c, pode) {
+    const p = R.progressoXp(c);
+    const mestre = LD.store.isMaster();
+    return `<section class="panel" style="margin:0 0 26px;padding:18px 22px">
+      <div class="panel-title" style="margin-bottom:10px"><h3>Experiência</h3><span class="caps">nível ${p.nivel}${p.nivel >= 99 ? '' : ' · faltam ' + fmt(p.falta) + ' para o ' + (p.nivel + 1)}</span></div>
+      <div class="num" style="font-size:22px">${fmt(p.xp)}<small class="muted"> / ${fmt(p.proximo)} XP</small></div>
+      <div class="bar ice" style="margin:8px 0"><i style="width:${Math.round(p.fracao * 100)}%"></i></div>
+      ${mestre ? `<div class="vital-ctrl"><input type="number" data-xpd placeholder="XP"><button class="btn plain" data-xp="+">Dar XP</button><button class="btn plain" data-xp="-">Tirar XP</button></div>` : ''}
+    </section>`;
+  }
+
   function identidade(c, done) {
     LD.ui.openDrawer({
       eyebrow: 'Ficha', title: 'Identidade e nível',
@@ -173,8 +194,10 @@
       onMount: (el) => {
         el.querySelector('[data-cancel]').addEventListener('click', LD.ui.closeDrawer);
         el.querySelector('[data-save]').addEventListener('click', () => {
+          const nivelAntes = c.nivel;
           Object.assign(c, LD.ui.readForm(el.querySelector('[data-form]')));
           c.nivel = LD.clamp(Number(c.nivel) || 1, 1, 99);
+          if (c.nivel !== nivelAntes) c.xp = R.xpParaNivel(c.nivel);
           LD.store.save('personagens', c).then(() => { LD.ui.closeDrawer(); done(); });
         });
         el.querySelector('[data-del]').addEventListener('click', () => {

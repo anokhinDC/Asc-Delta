@@ -6,7 +6,8 @@
   const st = {
     atacante: '', baseManual: 100, acao: 'comum', habId: '', perf: 99, fraco: 1, elemManual: 'fisico',
     alvo: '', mods: { marcado: false, vulneravel: false, quebrado: false, fortalecido: false }, critico: false,
-    mId: '', ataqueIdx: 0, defensor: '', reducaoManual: 0
+    mId: '', ataqueIdx: 0, defensor: '', reducaoManual: 0,
+    xpMonstro: '', xpNivel: 1, xpPapel: 'comum', xpGrupo: 3, xpQtd: 1
   };
 
   function opt(list, val, rotulo, vazio) {
@@ -144,6 +145,30 @@
           })() : '<div class="empty" style="padding:26px">Escolha um inimigo e um ataque.</div>'}
         </section>
       </div>
+
+      ${(() => {
+        const m = mons.find((x) => x.id === st.xpMonstro);
+        const nivel = m ? Number(m.nivel) || 1 : Number(st.xpNivel) || 1;
+        const cada = R.xpDeInimigo(nivel, st.xpPapel, st.xpGrupo);
+        const total = cada * Math.max(1, Number(st.xpQtd) || 1);
+        return `<section class="panel framed" style="margin-top:28px">
+          <div class="panel-title"><h3>XP do encontro</h3><span class="caps">por jogador</span></div>
+          <div class="row">
+            <div class="field"><label>Inimigo</label><select data-k="xpMonstro">${opt(mons, st.xpMonstro, (x) => `${x.nome} · nível ${x.nivel}`, 'Manual (nível digitado)')}</select></div>
+            ${m ? '' : `<div class="field"><label>Nível do inimigo</label><input type="number" min="1" data-k="xpNivel" value="${esc(st.xpNivel)}"></div>`}
+            <div class="field"><label>Papel</label><select data-k="xpPapel">${LD.PAPEIS_XP.map((p) => `<option value="${p.key}" ${p.key === st.xpPapel ? 'selected' : ''}>${p.nome}</option>`).join('')}</select></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Nível médio do grupo</label><input type="number" min="1" data-k="xpGrupo" value="${esc(st.xpGrupo)}"></div>
+            <div class="field"><label>Quantidade</label><input type="number" min="1" data-k="xpQtd" value="${esc(st.xpQtd)}"></div>
+          </div>
+          <table class="tbl">
+            <tr><td>XP de cada inimigo</td><td class="r num" style="font-size:22px">${fmt(cada)}</td></tr>
+            <tr class="hi"><td>Total para cada jogador</td><td class="r num" style="font-size:22px">${fmt(total)}</td></tr>
+          </table>
+          <p class="muted" style="font-size:13px">20 × nível × papel (Comum 1, Elite 2, Chefe 3), ajustado em 10% por nível de diferença entre o inimigo e o grupo, entre 0,5 e 1,5. Superar vale o mesmo que derrotar. Para dar o XP, abra a ficha do personagem.</p>
+        </section>`;
+      })()}
 
       ${mestre ? `
       <div class="subsect" style="margin-top:44px"><span>Biblioteca</span></div>

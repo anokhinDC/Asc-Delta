@@ -295,6 +295,42 @@
     return Math.max(3, Math.ceil(num(defesa) / 20));
   }
 
+  // Experiência: subir do nível N para N+1 custa 75 × N de XP (Mecânicas/Leis/Experiência).
+  const XP_CUSTO = 75;
+  const PAPEIS_XP = [
+    { key: 'comum', nome: 'Comum', mult: 1 },
+    { key: 'elite', nome: 'Elite', mult: 2 },
+    { key: 'chefe', nome: 'Chefe', mult: 3 }
+  ];
+  function xpParaNivel(n) {
+    const N = Math.max(1, Math.floor(num(n, 1)));
+    return (XP_CUSTO * N * (N - 1)) / 2;
+  }
+  function nivelPorXp(xp) {
+    const x = Math.max(0, num(xp));
+    let n = 1;
+    while (n < 99 && xpParaNivel(n + 1) <= x) n++;
+    return n;
+  }
+  // XP guardado na ficha, nunca abaixo do mínimo do nível atual.
+  function xpDaFicha(char) {
+    return Math.max(num(char && char.xp), xpParaNivel(num(char && char.nivel, 1)));
+  }
+  function progressoXp(char) {
+    const xp = xpDaFicha(char);
+    const nivel = nivelPorXp(xp);
+    const base = xpParaNivel(nivel);
+    const proximo = nivel >= 99 ? base : xpParaNivel(nivel + 1);
+    return { xp, nivel, base, proximo, falta: Math.max(0, proximo - xp), fracao: proximo > base ? (xp - base) / (proximo - base) : 1 };
+  }
+  function xpDeInimigo(nivelInimigo, papel, nivelGrupo) {
+    const n = Math.max(1, num(nivelInimigo, 1));
+    const g = Math.max(1, num(nivelGrupo, 1));
+    const mult = (PAPEIS_XP.find((p) => p.key === papel) || PAPEIS_XP[0]).mult;
+    const ajuste = clamp(1 + 0.1 * (n - g), 0.5, 1.5);
+    return Math.floor(20 * n * mult * ajuste + 0.5);
+  }
+
   // Ascensor de referência do mesmo nível: investe 1 ponto por nível
   // numa Via, em Vigor e em Agilidade (como a tabela de crescimento).
   function referencia(nivel) {
@@ -386,13 +422,14 @@
     STATUS, VIAS, ELEMENTOS, RESISTENCIAS, FORMAS, ALVOS, TIPOS_HAB, LUMIA_TIPOS,
     RESPOSTAS, VELOCIDADES, CLAREZAS, CATEGORIAS_MONSTRO, TAMANHOS, CONDICOES, PICTO_BONUS,
     MAX_PICTOS_EQUIPADOS, MAX_HABILIDADES_EQUIPADAS, DOMINIO_COMBATES,
-    byKey, num, clamp,
+    byKey, num, clamp, PAPEIS_XP,
     rules: {
       pontosTotais, pontosGastos, novoStatus, lumiaMaxima, pontosDeEco, aprendizados,
       derivados, validarStatus,
       custoHabilidade, multiplicador, nivelMinimo, perfeicoesDe, tabelaHabilidade, ehArea,
       pontosQuebra, referencia, analiseMonstro,
-      multResistencia, calcularDano, danoRecebido
+      multResistencia, calcularDano, danoRecebido,
+      xpParaNivel, nivelPorXp, xpDaFicha, progressoXp, xpDeInimigo
     }
   });
 })();
