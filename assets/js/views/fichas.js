@@ -337,6 +337,7 @@
         onSaved: (h) => {
           const atual = normalizar(JSON.parse(JSON.stringify(LD.store.get('personagens', c.id) || c)));
           if (!atual.habilidades.includes(h.id)) atual.habilidades.push(h.id);
+          if (!atual.habilidadesEquipadas.includes(h.id) && atual.habilidadesEquipadas.length < 6) atual.habilidadesEquipadas.push(h.id);
           LD.store.save('personagens', atual);
         }
       });

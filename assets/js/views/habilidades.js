@@ -26,6 +26,18 @@
     const c = fichaDeReferencia();
     return c ? `A prévia usa a Base de ${esc(c.nome)}, nível ${Number(c.nivel) || 1}.` : 'Sem ficha ainda: a prévia usa a Base do nível 1.';
   }
+  // Habilidade nova criada fora da ficha: entra na ficha do usuário (se ele tem uma só) e é equipada.
+  function aprenderNaFicha(h) {
+    const uid = LD.store.state && LD.store.state.user && LD.store.state.user.uid;
+    const minhas = LD.store.list('personagens').filter((c) => uid && c.ownerId === uid);
+    if (minhas.length !== 1) return;
+    const c = LD.fichas.normalizar(JSON.parse(JSON.stringify(minhas[0])));
+    if (!c.habilidades.includes(h.id)) c.habilidades.push(h.id);
+    if (!c.habilidadesEquipadas.includes(h.id) && c.habilidadesEquipadas.length < 6) c.habilidadesEquipadas.push(h.id);
+    LD.store.save('personagens', c);
+    LD.ui.toast(`Adicionada à ficha de ${c.nome}.`);
+  }
+
   function nomeVia(k) { const v = LD.byKey(LD.VIAS, k); return v ? v.nome : '—'; }
 
   function card(h) {
@@ -181,6 +193,7 @@
             LD.ui.closeDrawer();
             LD.ui.toast('Habilidade gravada.');
             if (opts.onSaved) opts.onSaved(saved);
+            else if (novo) aprenderNaFicha(saved);
           });
         });
       }
