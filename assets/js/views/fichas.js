@@ -13,6 +13,7 @@
     const s = R.novoStatus();
     return {
       nome: 'Novo Ascensor', jogador: '', conceito: '', lumiaTipo: 'Barreira', nivel: 1, xp: 0, retrato: '',
+      embedCor: '#8fa9c4', embedFoto: 'miniatura', embedSimbolo: '', embedRodape: '',
       status: s, pvAtual: null, lumiaAtual: 2,
       armaId: '', habilidades: [], habilidadesEquipadas: [],
       pictosPossuidos: [], pictosEquipados: [], dominio: {}, ecos: [], cristaisEco: 0,
@@ -188,7 +189,15 @@
         <div class="row">${field('Jogador', input('jogador', c.jogador))}${field('Nível', input('nivel', c.nivel, 'type="number" min="1" max="99"'), 'Cada nível depois do primeiro dá 3 pontos de Status.')}</div>
         ${field('Conceito', input('conceito', c.conceito, 'placeholder="Ex.: ferreira das estufas que perdeu a irmã em 1886"'))}
         ${field('Lúmia de...', select('lumiaTipo', LD.LUMIA_TIPOS.map((t) => ({ key: t, nome: t })), c.lumiaTipo), 'O jeito como o personagem manipula a Lúmia. Guia as habilidades que vai aprender.')}
-        ${field('Retrato (endereço de imagem)', input('retrato', c.retrato, 'placeholder="https://…"'))}
+        ${field('Retrato (endereço de imagem)', input('retrato', c.retrato, 'placeholder="https://…"'), 'A foto que aparece nas suas falas no Discord. Use um link público de imagem.')}
+        <div class="row">
+          ${field('Cor das falas', input('embedCor', c.embedCor || '#8fa9c4', 'type="color"'), 'A cor da barra lateral nas mensagens do seu personagem.')}
+          ${field('Foto nas falas', select('embedFoto', [{ key: 'miniatura', nome: 'Miniatura grande, ao lado' }, { key: 'autor', nome: 'Pequena, junto ao nome' }, { key: 'nenhuma', nome: 'Sem foto' }], c.embedFoto || 'miniatura'))}
+        </div>
+        <div class="row">
+          ${field('Símbolo do nome', input('embedSimbolo', c.embedSimbolo, 'maxlength="4" placeholder="✦"'), 'Aparece antes do nome. Até 4 caracteres.')}
+          ${field('Rodapé das falas', input('embedRodape', c.embedRodape, 'maxlength="60" placeholder="Ex.: ﹒✦﹒"'), 'Uma linha curta embaixo de cada fala. Pode ficar vazio.')}
+        </div>
       </form>`,
       foot: `<button class="btn danger" data-del>Excluir ficha</button><span style="flex:1"></span><button class="btn plain" data-cancel>Cancelar</button><button class="btn-primary" data-save>Gravar</button>`,
       onMount: (el) => {
