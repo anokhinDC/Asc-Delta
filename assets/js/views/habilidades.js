@@ -34,7 +34,6 @@
   // Bloco de leitura de uma habilidade (usado no detalhe e na ficha).
   function leitura(h, base) {
     const n = R.perfeicoesDe(h);
-    const forma = LD.byKey(LD.FORMAS, h.forma) || LD.FORMAS[0];
     const alvo = LD.byKey(LD.ALVOS, h.alvo);
     const tipo = LD.byKey(LD.TIPOS_HAB, h.tipo);
     const minimo = R.nivelMinimo(h);
@@ -44,7 +43,7 @@
       <div class="grid three" style="margin-bottom:18px">
         <div class="vital" style="border:1px solid var(--line)"><div class="caps">Custo</div><div class="v">${R.custoHabilidade(h)}</div>${LD.ui.lumiaBar(R.custoHabilidade(h), R.custoHabilidade(h))}</div>
         <div class="vital" style="border:1px solid var(--line)"><div class="caps">Perfeições</div><div class="v">${n}</div>${pips(n, n)}</div>
-        <div class="vital" style="border:1px solid var(--line)"><div class="caps">Compasso</div><div class="v" style="font-size:26px">${esc(forma.nome)}</div><div class="muted" style="font-size:12px">${esc(forma.ex)}</div></div>
+        <div class="vital" style="border:1px solid var(--line)"><div class="caps">Compasso</div><div class="v" style="font-size:22px">${n * 2} números</div><div class="muted" style="font-size:12px">Forma sorteada pelo bot</div></div>
       </div>
       <div class="caps" style="margin-bottom:4px">Multiplicador da Base de ${esc(nomeVia(h.via))} por perfeições certas (piso do custo, +25% a cada 2)${R.ehArea(h) ? ' (área: metade)' : ''}</div>
       ${escala(h, base)}
@@ -78,7 +77,7 @@
 
   function editar(h, opts) {
     const novo = !h;
-    h = Object.assign({ nome: '', via: 'gol', elemento: 'fisico', tipo: 'dano', alvo: 'unico', perfeicoes: 2, custo: 2, suprema: false, custoSuprema: 7, forma: 'direto', quebra: 1, porPerfeicao: [], perfeita: '', tags: [], descricao: '', origem: '' }, h ? JSON.parse(JSON.stringify(h)) : {});
+    h = Object.assign({ nome: '', via: 'gol', elemento: 'fisico', tipo: 'dano', alvo: 'unico', perfeicoes: 2, custo: 2, suprema: false, custoSuprema: 7, quebra: 1, porPerfeicao: [], perfeita: '', tags: [], descricao: '', origem: '' }, h ? JSON.parse(JSON.stringify(h)) : {});
     if (h.custo == null || h.custo === '') h.custo = Math.max(2, Math.min(6, h.perfeicoes || 2));
     h.custo = Math.max(2, Number(h.custo) || 2);
     h.perfeicoes = Math.max(2, Math.min(h.custo, h.perfeicoes || 2));
@@ -94,7 +93,6 @@
         <div class="row">
           ${field('Custo em Lúmia (2 a 6)', input('custo', h.custo, 'type="number" min="2" max="6"'), 'Quanto mais Lúmia, maior a zona de dano: piso de 100% + 10% por ponto acima de 2.')}
           ${field('Perfeições (2 até o custo)', input('perfeicoes', h.perfeicoes, 'type="number" min="2" max="6"'), 'Cada ponto de Lúmia permite +1 perfeição. O Compasso tem 2 números por perfeição, e cada 2 perfeições certas dão +25%.')}
-          ${field('Forma do Compasso', select('forma', LD.FORMAS.map((f) => ({ key: f.key, nome: `${f.nome} · ${f.ex}` })), h.forma))}
           ${field('Quebra', input('quebra', h.quebra, 'type="number" min="0" max="6"'))}
         </div>
         <div class="row" style="align-items:end">
