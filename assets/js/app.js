@@ -50,7 +50,7 @@
       <div class="gate">
         <div class="eyebrow">Expedição Delta</div>
         <h1 style="margin:12px 0 10px">Assine a lista</h1>
-        <p class="lead paper-2" style="margin-bottom:28px">Entre com o mesmo usuário do painel antigo. Se for a primeira vez, a conta é criada agora. Usuários que começam com <span class="kbd">mestre</span> ou <span class="kbd">admin</span> entram como mestre.</p>
+        <p class="lead paper-2" style="margin-bottom:28px">Entre com seu usuário e senha. Se for a primeira vez, a conta é criada agora.</p>
         <form data-login class="panel framed" style="padding:28px">
           <div class="field"><label>Usuário</label><input name="u" required autocomplete="username" class="big"></div>
           <div class="field"><label>Senha</label><input name="p" type="password" required autocomplete="current-password"></div>
