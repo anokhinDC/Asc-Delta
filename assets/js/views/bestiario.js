@@ -16,7 +16,7 @@
     const fracos = Object.entries(m.resistencias || {}).filter(([, r]) => r === 'fraco').map(([e]) => e);
     return `
       <article class="card" data-mon="${esc(m.id)}">
-        <div class="card-meta"><span class="tag ${m.categoria === 'boss' || m.categoria === 'colosso' ? 'red' : 'gold'}">${esc(cat ? cat.nome : '')}</span><span class="tag">Nível ${esc(m.nivel)}</span>${m.voa ? '<span class="tag lumia">Voa</span>' : ''}${!m.revelado ? '<span class="tag">Oculto</span>' : ''}</div>
+        <div class="card-meta"><span class="tag ${m.categoria === 'boss' || m.categoria === 'colosso' ? 'accent' : 'ice'}">${esc(cat ? cat.nome : '')}</span><span class="tag">Nível ${esc(m.nivel)}</span>${m.voa ? '<span class="tag lumia">Voa</span>' : ''}${!m.revelado ? '<span class="tag">Oculto</span>' : ''}</div>
         <div class="card-title">${esc(m.nome)}</div>
         <div class="card-desc">${esc(m.descricao || '')}</div>
         <div class="card-foot">
@@ -124,7 +124,7 @@
           <div class="subsect"><span>Pontos fracos</span></div>
           ${(m.pontosFracos || []).length ? m.pontosFracos.map((p) => {
             const t = LD.byKey(LD.TAMANHOS, p.tamanho);
-            return `<div class="sig-row" style="grid-template-columns:1fr auto"><div><div class="serif" style="font-size:19px">${esc(p.nome)}</div><div class="muted" style="font-size:13px">${esc(p.efeito)}</div></div><span class="tag box gold">${esc(t ? t.nome : '')} · ${t ? t.simbolos : '?'} símb.</span></div>`;
+            return `<div class="sig-row" style="grid-template-columns:1fr auto"><div><div class="serif" style="font-size:19px">${esc(p.nome)}</div><div class="muted" style="font-size:13px">${esc(p.efeito)}</div></div><span class="tag box ice">${esc(t ? t.nome : '')} · ${t ? t.simbolos : '?'} símb.</span></div>`;
           }).join('') : '<div class="muted">Nenhum ponto fraco conhecido.</div>'}
         </div>
       </div>

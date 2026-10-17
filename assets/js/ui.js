@@ -1,5 +1,5 @@
 /*
- * Beyond Depths · Lúmia
+ * Ascensão Delta · Lúmia
  * Utilitários de interface: escape, marcadores, gaveta, avisos, formulários.
  */
 (function () {
@@ -27,7 +27,7 @@
   }
   function viaTag(key) {
     const v = LD.byKey(LD.VIAS, key);
-    return v ? `<span class="tag gold">${esc(v.nome)}</span>` : '';
+    return v ? `<span class="tag ice">${esc(v.nome)}</span>` : '';
   }
   function pips(total, on) {
     let s = '<span class="pips" title="Perfeições">';

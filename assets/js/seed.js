@@ -1,5 +1,5 @@
 /*
- * Beyond Depths · Lúmia
+ * Ascensão Delta · Lúmia
  * Biblioteca inicial, tirada do Roteiro (Ato I).
  * O mestre grava isto no banco pelo botão "Carregar biblioteca inicial".
  * Os ids são fixos, então carregar de novo atualiza em vez de duplicar.

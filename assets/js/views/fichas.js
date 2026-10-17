@@ -40,7 +40,7 @@
           ${c.retrato ? `<img src="${esc(c.retrato)}" alt="">` : `<span class="initial" style="font-size:54px">${esc(ini)}</span>`}
         </div>
         <div style="flex:1;display:flex;flex-direction:column;gap:7px;min-width:0">
-          <div class="card-meta"><span class="tag gold">Nível ${esc(d.nivel)}</span><span class="tag">${esc(c.lumiaTipo || '')}</span></div>
+          <div class="card-meta"><span class="tag ice">Nível ${esc(d.nivel)}</span><span class="tag">${esc(c.lumiaTipo || '')}</span></div>
           <div class="card-title">${esc(c.nome)}</div>
           <div class="muted" style="font-size:13px">${esc(c.conceito || '')}</div>
           <div class="meter" style="margin-top:auto"><span class="caps">PV</span><div class="bar"><i style="width:${Math.max(0, Math.min(100, (pv / d.pvMax) * 100))}%"></i></div><span class="num">${fmt(pv)}</span></div>
@@ -250,13 +250,13 @@
       const bloqueada = R.nivelMinimo(h) > d.nivel;
       return `
         <div class="attr" style="grid-template-columns:30px 1fr auto auto">
-          ${pode ? `<button class="icon-btn" data-eq="${esc(h.id)}" title="${eq ? 'Desequipar' : 'Equipar'}" style="${eq ? 'background:var(--red);border-color:var(--red)' : ''}"><span>${eq ? '◆' : ''}</span></button>` : `<i class="dia" style="${eq ? 'background:var(--red)' : ''}"></i>`}
+          ${pode ? `<button class="icon-btn" data-eq="${esc(h.id)}" title="${eq ? 'Desequipar' : 'Equipar'}" style="${eq ? 'background:var(--accent);border-color:var(--accent)' : ''}"><span>${eq ? '◆' : ''}</span></button>` : `<i class="dia" style="${eq ? 'background:var(--accent)' : ''}"></i>`}
           <div>
             <div class="name" style="cursor:pointer" data-ver="${esc(h.id)}">${esc(h.nome)} ${bloqueada ? `<small class="bad">nível ${R.nivelMinimo(h)}</small>` : ''}</div>
             <div class="card-meta">${viaTag(h.via)} ${elemTag(h.elemento)} ${pips(n, n)}</div>
           </div>
           <div style="text-align:right">
-            <div class="num" style="font-size:22px">${fmt(min)} <span class="muted">→</span> <span style="color:var(--gold-2)">${fmt(max)}</span></div>
+            <div class="num" style="font-size:22px">${fmt(min)} <span class="muted">→</span> <span style="color:var(--ice-2)">${fmt(max)}</span></div>
             <div class="caps" style="font-size:9.5px">${h.tipo === 'cura' ? 'cura' : h.tipo === 'escudo' ? 'escudo' : 'dano'} · Base ${base}</div>
           </div>
           <div style="display:flex;gap:10px;align-items:center">${custoTag(h)} ${pode ? `<button class="btn danger plain" data-rm="${esc(h.id)}">×</button>` : ''}</div>
@@ -338,7 +338,7 @@
           <div><div class="name">${esc(p.nome)} ${dominado ? '<small class="ok">dominado</small>' : ''}</div><div class="desc">${esc(p.efeito)}</div><div style="margin-top:4px">${LD.biblioteca.bonusTexto(p.bonus)}</div></div>
           <div style="text-align:center"><div class="caps">Domínio</div><div class="pips">${[1, 2, 3, 4].map((k) => `<i class="pip ${dom >= k ? 'on' : ''}"></i>`).join('')}</div>${pode && !dominado ? `<button class="btn plain" data-dom="${esc(p.id)}" style="font-size:10px">+1 combate</button>` : ''}</div>
           <div style="display:flex;flex-direction:column;gap:6px">
-            ${pode ? `<button class="btn ${eq ? '' : 'plain'}" data-pe="${esc(p.id)}">${eq ? 'Equipado' : 'Equipar'}</button>` : eq ? '<span class="tag red">Equipado</span>' : ''}
+            ${pode ? `<button class="btn ${eq ? '' : 'plain'}" data-pe="${esc(p.id)}">${eq ? 'Equipado' : 'Equipar'}</button>` : eq ? '<span class="tag accent">Equipado</span>' : ''}
             ${pode && dominado && !eq ? `<button class="btn ${eco ? '' : 'plain'}" data-eco="${esc(p.id)}">${eco ? 'Eco ativo' : 'Usar como Eco'} · ${esc(p.custoEco)}</button>` : eco ? '<span class="tag lumia">Eco</span>' : ''}
           </div>
           ${pode ? `<button class="btn danger plain" data-prm="${esc(p.id)}">×</button>` : '<span></span>'}
@@ -365,7 +365,7 @@
         </div>
         <div>
           <div class="panel-title"><h3>Ecos</h3><span class="caps">pontos ${ecoUsado} / ${d.pontosEco}</span></div>
-          <div class="bar gold" style="margin-bottom:10px"><i style="width:${Math.min(100, (ecoUsado / Math.max(1, d.pontosEco)) * 100)}%"></i></div>
+          <div class="bar ice" style="margin-bottom:10px"><i style="width:${Math.min(100, (ecoUsado / Math.max(1, d.pontosEco)) * 100)}%"></i></div>
           ${pode ? `<div class="field" style="max-width:220px"><label>Cristais de Eco</label><input type="number" min="0" data-cristais value="${esc(c.cristaisEco || 0)}"></div>` : ''}
           <p class="muted" style="font-size:13px">Um picto usado em ${LD.DOMINIO_COMBATES} combates fica dominado. Dominado, o efeito dele pode ser levado como Eco, sem o bônus de Status, pagando o custo em Pontos de Eco.</p>
         </div>

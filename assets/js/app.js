@@ -30,7 +30,7 @@
     const user = s.user ? (s.user.email || '').split('@')[0] : null;
     nav.innerHTML = `
       <div class="brand">
-        <div class="title">Beyond<br><em>Depths</em></div>
+        <div class="title">Ascensão<br><em>Delta</em></div>
         <div class="sub eyebrow">Biblioteca de Lúmia</div>
       </div>
       <ul class="menu">${MENU.map((m) => m.sep ? '<li class="sep"></li>' : `
@@ -38,7 +38,7 @@
       </ul>
       <div class="nav-foot">
         ${s.local ? '<span class="caps">Modo local · neste navegador</span>' : user
-          ? `<span class="caps">${LD.store.isMaster() ? '<span style="color:var(--red-2)">Mestre</span> · ' : ''}${esc(user)}</span><button class="btn plain" data-sair style="align-self:flex-start">Sair</button>`
+          ? `<span class="caps">${LD.store.isMaster() ? '<span style="color:var(--accent-2)">Mestre</span> · ' : ''}${esc(user)}</span><button class="btn plain" data-sair style="align-self:flex-start">Sair</button>`
           : '<a href="#/fichas" class="btn" style="align-self:flex-start">Entrar</a>'}
       </div>`;
     const sair = nav.querySelector('[data-sair]');
@@ -72,7 +72,7 @@
     const r = rotaAtual();
     const view = LD.views[r.nome] || LD.views.fichas;
     numeral.textContent = view.numeral || '';
-    document.title = `${view.titulo} · Beyond Depths`;
+    document.title = `${view.titulo} · Ascensão Delta`;
     if (!s.ready) { main.innerHTML = '<div class="empty">Acendendo os postes…</div>'; return; }
     if (!s.local && !s.user && !LIVRES.includes(r.nome)) { renderLogin(); return; }
     view.render(main, r.param);

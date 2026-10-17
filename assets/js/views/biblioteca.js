@@ -11,7 +11,7 @@
 
   function bonusTexto(b) {
     if (!b) return '';
-    return LD.PICTO_BONUS.filter((k) => Number(b[k.key])).map((k) => `<span class="tag gold">+${esc(b[k.key])} ${esc(k.nome)}</span>`).join(' ');
+    return LD.PICTO_BONUS.filter((k) => Number(b[k.key])).map((k) => `<span class="tag ice">+${esc(b[k.key])} ${esc(k.nome)}</span>`).join(' ');
   }
 
   /* ---------------- Pictos ---------------- */
@@ -51,7 +51,7 @@
         <div class="card-meta">${viaTag(a.via)} ${elemTag(a.elemento)}</div>
         <div class="card-title">${esc(a.nome)}</div>
         <div class="card-desc">${esc(a.descricao || '')}</div>
-        <div class="card-foot"><span class="caps">${esc(a.origem || '')}</span><span class="tag gold">Poder +${esc(a.poder || 0)}</span></div>
+        <div class="card-foot"><span class="caps">${esc(a.origem || '')}</span><span class="tag ice">Poder +${esc(a.poder || 0)}</span></div>
       </article>`,
     leitura: (a) => `
       <div class="card-meta" style="margin-bottom:16px">${viaTag(a.via)} ${elemTag(a.elemento)}</div>
@@ -85,7 +85,7 @@
       const c = LD.byKey(CATEGORIAS_ITEM, i.categoria);
       return `
       <article class="card" data-open="${esc(i.id)}" style="min-height:120px">
-        <div class="card-meta"><span class="tag gold">${esc(c ? c.nome : '')}</span> ${i.rapido ? '<span class="tag lumia">Rápido</span>' : ''}</div>
+        <div class="card-meta"><span class="tag ice">${esc(c ? c.nome : '')}</span> ${i.rapido ? '<span class="tag lumia">Rápido</span>' : ''}</div>
         <div class="card-title">${esc(i.nome)}</div>
         <div class="card-desc">${esc(i.efeito || '')}</div>
         <div class="card-foot"><span class="caps">${esc(i.origem || '')}</span></div>

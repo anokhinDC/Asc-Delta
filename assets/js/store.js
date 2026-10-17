@@ -1,5 +1,5 @@
 /*
- * Beyond Depths · Lúmia
+ * Ascensão Delta · Lúmia
  * Dados: Firebase (as mesmas contas do painel antigo) ou modo local.
  *
  * As coleções do sistema novo têm o prefixo "lumia_", para não

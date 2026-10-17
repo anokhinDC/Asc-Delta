@@ -172,7 +172,7 @@
     main.querySelector('[data-semear]').addEventListener('click', () => {
       LD.store.semear().then((n) => LD.ui.toast(`${n} registros gravados na biblioteca.`));
     });
-    main.querySelector('[data-exportar]').addEventListener('click', () => LD.ui.baixar('beyond-depths-lumia.json', LD.store.exportar()));
+    main.querySelector('[data-exportar]').addEventListener('click', () => LD.ui.baixar('ascensao-delta-lumia.json', LD.store.exportar()));
     const file = main.querySelector('[data-file]');
     main.querySelector('[data-importar]').addEventListener('click', () => file.click());
     file.addEventListener('change', () => {

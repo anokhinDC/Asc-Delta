@@ -1,4 +1,4 @@
-# Beyond Depths · Biblioteca de Lúmia
+# Ascensão Delta · Biblioteca de Lúmia
 
 Biblioteca do sistema da Expedição Delta: fichas, habilidades, pictos, arsenal e bestiário. Não há mesa de combate. O site faz as contas (PV, Bases de cada Via, custo e dano das habilidades, Pontos de Quebra, PV sugerido para cada criatura, quanto cada golpe tira) e o combate acontece na narração.
 

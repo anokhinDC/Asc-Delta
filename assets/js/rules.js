@@ -1,5 +1,5 @@
 /*
- * Beyond Depths · Lúmia
+ * Ascensão Delta · Lúmia
  * Motor de regras: todas as fórmulas do sistema ficam aqui.
  * As telas só leem destas funções, para que uma mudança de regra
  * aconteça num lugar só.

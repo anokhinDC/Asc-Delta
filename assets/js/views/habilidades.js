@@ -13,7 +13,7 @@
     const tipo = LD.byKey(LD.TIPOS_HAB, h.tipo);
     return `
       <article class="card" data-open="${esc(h.id)}">
-        <div class="card-meta">${viaTag(h.via)} ${elemTag(h.elemento)} ${h.suprema ? '<span class="tag red">Suprema</span>' : ''}</div>
+        <div class="card-meta">${viaTag(h.via)} ${elemTag(h.elemento)} ${h.suprema ? '<span class="tag accent">Suprema</span>' : ''}</div>
         <div class="card-title">${esc(h.nome)}</div>
         <div class="card-meta">${pips(n, n)} <span class="caps">${n} perfeiç${n > 1 ? 'ões' : 'ão'}</span></div>
         <div class="card-desc">${esc(h.perfeita ? 'Perfeita: ' + h.perfeita : h.descricao || '')}</div>
@@ -39,7 +39,7 @@
     const tipo = LD.byKey(LD.TIPOS_HAB, h.tipo);
     const minimo = R.nivelMinimo(h);
     return `
-      <div class="card-meta" style="margin-bottom:14px">${viaTag(h.via)} ${elemTag(h.elemento)} <span class="tag">${esc(tipo ? tipo.nome : '')}</span> <span class="tag">${esc(alvo ? alvo.nome : '')}</span> ${h.suprema ? '<span class="tag red">Suprema</span>' : ''}</div>
+      <div class="card-meta" style="margin-bottom:14px">${viaTag(h.via)} ${elemTag(h.elemento)} <span class="tag">${esc(tipo ? tipo.nome : '')}</span> <span class="tag">${esc(alvo ? alvo.nome : '')}</span> ${h.suprema ? '<span class="tag accent">Suprema</span>' : ''}</div>
       ${h.descricao ? `<p class="serif" style="font-size:19px;line-height:1.45;margin:0 0 18px">${esc(h.descricao)}</p>` : ''}
       <div class="grid three" style="margin-bottom:18px">
         <div class="vital" style="border:1px solid var(--line)"><div class="caps">Custo</div><div class="v">${R.custoHabilidade(h)}</div>${LD.ui.lumiaBar(R.custoHabilidade(h), R.custoHabilidade(h))}</div>
@@ -50,7 +50,7 @@
       ${escala(h, base)}
       <div style="margin-top:18px">
         ${(h.porPerfeicao || []).filter((p) => p && p.texto).map((p) => `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps">Na ${esc(p.n)}ª</span><span>${esc(p.texto)}</span></div>`).join('')}
-        ${h.perfeita ? `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps" style="color:var(--red-2)">Perfeita</span><span>${esc(h.perfeita)} <span class="muted">· devolve 1 Lúmia</span></span></div>` : ''}
+        ${h.perfeita ? `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps" style="color:var(--accent-2)">Perfeita</span><span>${esc(h.perfeita)} <span class="muted">· devolve 1 Lúmia</span></span></div>` : ''}
         ${h.quebra ? `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps">Quebra</span><span>+${esc(h.quebra)}</span></div>` : ''}
         ${(h.tags || []).length ? `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps">Notas</span><span>${(h.tags || []).map(esc).join(' · ')}</span></div>` : ''}
         ${minimo > 1 ? `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps">Requisito</span><span>Nível ${minimo} ou mais</span></div>` : ''}
