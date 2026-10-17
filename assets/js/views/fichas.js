@@ -310,7 +310,7 @@
     tab.querySelectorAll('[data-ver]').forEach((el) => el.addEventListener('click', () => {
       const h = LD.store.get('habilidades', el.dataset.ver);
       LD.ui.openDrawer({ eyebrow: 'Habilidade de ' + c.nome, title: h.nome, body: LD.habilidades.leitura(h, d.bases[h.via]) + (LD.store.canEdit('habilidades', h) ? '<div style="margin-top:22px"><button class="btn" data-ed>Editar na biblioteca</button></div>' : ''),
-        onMount: (el2) => { const ed = el2.querySelector('[data-ed]'); if (ed) ed.addEventListener('click', () => { LD.ui.closeDrawer(); setTimeout(() => LD.habilidades.abrir(h.id, { base: d.bases[h.via] }), 330); }); } });
+        onMount: (el2) => { const ed = el2.querySelector('[data-ed]'); if (ed) ed.addEventListener('click', () => { LD.ui.closeDrawer(); setTimeout(() => LD.habilidades.abrir(h.id, { bases: d.bases }), 330); }); } });
     }));
     if (!pode) return;
     tab.querySelectorAll('[data-eq]').forEach((b) => b.addEventListener('click', () => {
@@ -333,7 +333,7 @@
     });
     tab.querySelector('[data-criar]').addEventListener('click', () => {
       LD.habilidades.abrir(null, {
-        base: d.bases.gol,
+        bases: d.bases,
         onSaved: (h) => {
           const atual = normalizar(JSON.parse(JSON.stringify(LD.store.get('personagens', c.id) || c)));
           if (!atual.habilidades.includes(h.id)) atual.habilidades.push(h.id);

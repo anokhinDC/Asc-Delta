@@ -4,7 +4,7 @@
   const R = LD.rules;
 
   const st = {
-    atacante: '', baseManual: 100, acao: 'comum', habId: '', perf: 99, fraco: 1, elemManual: 'fisico',
+    atacante: '', nivelRef: 5, acao: 'comum', habId: '', perf: 99, fraco: 1, elemManual: 'fisico',
     alvo: '', mods: { marcado: false, vulneravel: false, quebrado: false, fortalecido: false }, critico: false,
     mId: '', ataqueIdx: 0, defensor: '', reducaoManual: 0,
     xpMonstro: '', xpNivel: 1, xpPapel: 'comum', xpGrupo: 3, xpQtd: 1
@@ -26,7 +26,7 @@
 
     let base, mult = 1, elemento, quebra = 0, rotulo;
     if (st.acao === 'habilidade' && h) {
-      base = d ? d.bases[h.via] : LD.clamp(Number(st.baseManual) || 0, 0, 700);
+      base = d ? d.bases[h.via] : R.referencia(Number(st.nivelRef) || 5).base;
       const n = R.perfeicoesDe(h);
       const k = Math.min(st.perf, n);
       mult = R.multiplicador(h, k);
@@ -34,13 +34,13 @@
       quebra = R.quebraDe(h);
       rotulo = `${h.nome} · ${k}/${n} perfeições`;
     } else if (st.acao === 'disparo') {
-      base = d ? d.bases.mir : LD.clamp(Number(st.baseManual) || 0, 0, 700);
+      base = d ? d.bases.mir : R.referencia(Number(st.nivelRef) || 5).base;
       elemento = st.elemManual;
       quebra = st.fraco > 1 ? 1 : 0;
       rotulo = 'Disparo (Mira Livre)';
     } else {
       const arma = d && d.arma;
-      base = d ? d.bases[arma ? arma.via : 'gol'] : LD.clamp(Number(st.baseManual) || 0, 0, 700);
+      base = d ? d.bases[arma ? arma.via : 'gol'] : R.referencia(Number(st.nivelRef) || 5).base;
       elemento = arma ? arma.elemento : st.elemManual;
       quebra = 1 + (arma ? LD.clamp(Number(arma.quebra) || 0, 0, R.LIMITE_QUEBRA_ARMA) : 0);
       rotulo = 'Ataque Comum' + (arma ? ' · ' + arma.nome : '');
@@ -90,7 +90,7 @@
           <div class="panel-title"><h3>Ascensor → Inimigo</h3><span class="caps">dano causado</span></div>
           <div class="row">
             <div class="field"><label>Atacante</label><select data-k="atacante">${opt(chars, st.atacante, (x) => x.nome, 'Manual (Base digitada)')}</select></div>
-            ${!A.c ? `<div class="field"><label>Base</label><input type="number" data-k="baseManual" min="0" max="700" value="${esc(st.baseManual)}"></div>` : ''}
+            ${!A.c ? `<div class="field"><label>Nível de referência</label><select data-k="nivelRef">${[1, 5, 10, 15, 20, 30, 40].map((n) => `<option value="${n}"${Number(st.nivelRef) === n ? ' selected' : ''}>Nível ${n} · Base ${R.referencia(n).base}</option>`).join('')}</select></div>` : ''}
           </div>
           <div class="chips" style="margin-bottom:14px">${[['comum', 'Ataque Comum'], ['habilidade', 'Habilidade'], ['disparo', 'Disparo']]
             .map(([k, n]) => `<button class="chip ${st.acao === k ? 'on' : ''}" data-acao="${k}">${n}</button>`).join('')}</div>

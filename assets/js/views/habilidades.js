@@ -5,8 +5,15 @@
 
   const filtros = { q: '', via: 'todas', perf: 'todas' };
 
-  // A prévia usa uma Base de exemplo: de 1 a 700 (a Base do nível 40 passa pouco de 500).
-  function baseDaPrevia(v) { return LD.clamp(Number(v) || 0, 1, 700); }
+  // O dano é sempre pré-calculado: vem do nível e da Via, nunca de um número digitado.
+  const NIVEIS_PREVIA = [1, 5, 10, 15, 20, 30, 40];
+  function seletorDeNivel() {
+    return `<div class="field"><label>Nível de referência</label><select data-nivel>${NIVEIS_PREVIA.map((n) => `<option value="${n}"${n === 5 ? ' selected' : ''}>Nível ${n} · Base ${R.referencia(n).base}</option>`).join('')}</select></div>`;
+  }
+  function baseDaPrevia(opts, via, nivel) {
+    if (opts && opts.bases && opts.bases[via] != null) return opts.bases[via];
+    return R.referencia(Number(nivel) || 5).base;
+  }
 
   function nomeVia(k) { const v = LD.byKey(LD.VIAS, k); return v ? v.nome : '—'; }
 
@@ -53,7 +60,7 @@
       <div style="margin-top:18px">
         ${(h.porPerfeicao || []).filter((p) => p && p.texto).map((p) => `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps">Na ${esc(p.n)}ª</span><span>${esc(p.texto)}</span></div>`).join('')}
         ${h.perfeita ? `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps" style="color:var(--accent-2)">Perfeita</span><span>${esc(h.perfeita)} <span class="muted">· devolve 1 Lúmia</span></span></div>` : ''}
-        ${R.quebraDe(h) ? `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps">Quebra</span><span>+${esc(R.quebraDe(h))}${R.focoDe(h) ? ` · foco ${R.focoDe(h)} (−${R.focoDe(h) * 15}% de dano)` : ''}</span></div>` : ''}
+        ${R.quebraDe(h) ? `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps">Quebra</span><span>+${esc(R.quebraDe(h))}${R.focoDe(h) ? ` · foco ${R.focoDe(h)} (−${R.focoDe(h) * 15}% de dano)` : ''}${R.efeitosDe(h) ? ` · ${R.efeitosDe(h)} efeito(s) extra (−${R.efeitosDe(h) * 10}%)` : ''}</span></div>` : ''}
         ${(h.tags || []).length ? `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps">Notas</span><span>${(h.tags || []).map(esc).join(' · ')}</span></div>` : ''}
         ${minimo > 1 ? `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps">Requisito</span><span>Nível ${minimo} ou mais</span></div>` : ''}
         ${h.origem ? `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps">Origem</span><span>${esc(h.origem)}</span></div>` : ''}
@@ -67,11 +74,10 @@
     if (h && !podeEditar) {
       LD.ui.openDrawer({
         eyebrow: 'Habilidade', title: h.nome,
-        body: `<div class="field"><label>Prévia com a Base</label><input type="number" data-base min="1" max="700" value="88"></div><div data-leitura>${leitura(h, 88)}</div>`,
+        body: `${opts.bases ? '' : seletorDeNivel()}<div data-leitura>${leitura(h, baseDaPrevia(opts, h.via, 5))}</div>`,
         onMount: (el) => {
-          const b = el.querySelector('[data-base]');
-          b.addEventListener('change', () => { b.value = baseDaPrevia(b.value); });
-          b.addEventListener('input', () => { el.querySelector('[data-leitura]').innerHTML = leitura(h, baseDaPrevia(b.value)); });
+          const b = el.querySelector('[data-nivel]');
+          if (b) b.addEventListener('change', () => { el.querySelector('[data-leitura]').innerHTML = leitura(h, baseDaPrevia(opts, h.via, b.value)); });
         }
       });
       return;
@@ -97,6 +103,8 @@
         <div class="row">
           ${field('Custo em Lúmia (2 a 6)', input('custo', h.custo, 'type="number" min="2" max="6"'), 'Quanto mais Lúmia, maior a zona de dano: piso de 100% + 10% por ponto acima de 2.')}
           ${field('Perfeições (2 até o custo)', input('perfeicoes', h.perfeicoes, 'type="number" min="2" max="6"'), 'Cada ponto de Lúmia permite +1 perfeição. O Compasso tem 2 números por perfeição, e cada 2 perfeições certas dão +25%.')}
+          ${field('Efeitos extras', select('efeitos', [{ key: '0', nome: 'Nenhum' }, { key: '1', nome: '1 · −10% de dano' }, { key: '2', nome: '2 · −20% de dano' }, { key: '3', nome: '3 · −30% de dano' }], String(h.efeitos || 0)), 'Condição, segundo alvo, área, escudo extra. Cada efeito custa dano.')}
+          ${LD.store.isMaster() ? field('Ajuste do mestre', select('ajusteMestre', [-20, -15, -10, -5, 0, 5, 10, 15, 20].map((v) => ({ key: String(v), nome: (v > 0 ? '+' : '') + v + '% de dano' })), String(h.ajusteMestre || 0)), 'Só o mestre mexe. De −20% a +20%.') : ''}
           ${field('Foco em Quebra', select('foco', [{ key: '0', nome: 'Nenhum · dano pleno' }, { key: '1', nome: '1 · −15% de dano, +1 de Quebra' }, { key: '2', nome: '2 · −30% de dano, +2 de Quebra' }, { key: '3', nome: '3 · −45% de dano, +3 de Quebra' }], String(h.foco || 0)), 'Menos dano em volta da Base da Via libera mais Quebra.')}
           ${field('Quebra', input('quebra', h.quebra, 'type="number" min="0" max="7"'), 'Máximo: metade do custo (para cima) + o foco.')}
         </div>
@@ -117,7 +125,7 @@
         ${field('Origem', input('origem', h.origem, 'placeholder="Quem ensinou, de onde veio"'))}
       </form>
       <div class="subsect"><span>Prévia</span></div>
-      <div class="field"><label>Base da Via para a prévia</label><input type="number" data-base min="1" max="700" value="${opts.base || 88}" data-skip></div>
+      ${opts.bases ? '<p class="muted" style="font-size:13px">A prévia usa a Base de quem está criando a habilidade.</p>' : seletorDeNivel()}
       <div data-preview></div>`;
 
     const foot = `
@@ -139,11 +147,11 @@
         const preview = () => {
           const d = LD.ui.readForm(form);
           const tmp = Object.assign({}, h, d);
-          el.querySelector('[data-preview]').innerHTML = leitura(tmp, baseDaPrevia(el.querySelector('[data-base]').value));
+          el.querySelector('[data-preview]').innerHTML = leitura(tmp, baseDaPrevia(opts, tmp.via, (el.querySelector('[data-nivel]') || {}).value));
         };
         form.addEventListener('input', preview);
-        el.querySelector('[data-base]').addEventListener('input', preview);
-        el.querySelector('[data-base]').addEventListener('change', (e) => { e.target.value = baseDaPrevia(e.target.value); preview(); });
+        const nv = el.querySelector('[data-nivel]');
+        if (nv) nv.addEventListener('change', preview);
         preview();
         el.querySelector('[data-cancel]').addEventListener('click', LD.ui.closeDrawer);
         const del = el.querySelector('[data-del]');
@@ -158,6 +166,8 @@
           out.custo = LD.clamp(Number(out.custo) || 2, 2, 6);
           out.perfeicoes = LD.clamp(Number(out.perfeicoes) || 2, 2, out.custo);
           out.foco = LD.clamp(Number(out.foco) || 0, 0, 3);
+          out.efeitos = LD.clamp(Number(out.efeitos) || 0, 0, 3);
+          out.ajusteMestre = LD.store.isMaster() ? LD.clamp(Math.round((Number(out.ajusteMestre) || 0) / 5) * 5, -20, 20) : (Number(h.ajusteMestre) || 0);
           out.quebra = LD.clamp(Math.floor(Number(out.quebra) || 0), 0, R.quebraMaxima(out));
           if (out.suprema) out.perfeicoes = 6;
           out.custoSuprema = LD.clamp(Number(out.custoSuprema) || 7, 7, 9);
