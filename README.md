@@ -17,7 +17,7 @@ Biblioteca do sistema da Expedição Delta: fichas, habilidades, pictos, arsenal
 ## Acesso
 
 - Entre com usuário e senha. O usuário vira `usuario@beyonddepths.com`, e a conta é criada no primeiro acesso.
-- Usuários que começam com `mestre` ou `admin` são mestre: editam pictos, armas, itens, criaturas e qualquer ficha.
+- Só os usuários `mestre` e `admin` (exatamente esses dois) são mestre: editam pictos, armas, itens, criaturas e qualquer ficha. `mestre2` ou `admin1` são jogadores comuns.
 - `?local=1` no endereço abre em modo local, sem Firebase, salvando só no navegador. Útil para testar.
 
 ## Firebase

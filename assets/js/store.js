@@ -67,10 +67,13 @@
     try { localStorage.setItem(lsKey(col), JSON.stringify(state.data[col])); } catch (e) { console.warn(e); }
   }
 
+  // Só estas duas contas são mestre. Qualquer outro usuário, mesmo que comece com 'mestre' ou 'admin', é jogador.
+  const MESTRES = ['mestre@beyonddepths.com', 'admin@beyonddepths.com'];
+
   function isMaster() {
     if (state.local) return true;
     const e = state.user && state.user.email;
-    return !!e && (e.startsWith('admin@') || e.startsWith('mestre@'));
+    return !!e && MESTRES.includes(e.toLowerCase());
   }
 
   function canEdit(col, item) {
