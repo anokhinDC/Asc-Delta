@@ -106,7 +106,7 @@
               <div class="caps">PV</div>
               <div class="v">${fmt(c.pvAtual)}<small> / ${fmt(d.pvMax)}</small></div>
               <div class="bar" style="margin:8px 0"><i style="width:${Math.max(0, Math.min(100, (c.pvAtual / d.pvMax) * 100))}%"></i></div>
-              ${pode ? `<div class="vital-ctrl"><input type="number" data-pvd placeholder="valor"><button class="btn plain" data-pv="-">Dano</button><button class="btn plain" data-pv="+">Cura</button><button class="btn plain" data-pv="max">Cheio</button></div>` : ''}
+              ${pode ? `<div class="vital-ctrl"><input type="number" data-pvd placeholder="valor"><button class="btn plain" data-pv="-" title="Aplica a Redução da ficha">Dano</button><button class="btn plain" data-pv="agu" title="Aguentar: Redução em dobro (máx. 60%)">Aguentar</button><button class="btn plain" data-pv="dir" title="Ignora a Redução (queda, veneno, perda direta)">Direto</button><button class="btn plain" data-pv="+">Cura</button><button class="btn plain" data-pv="max">Cheio</button></div>` : ''}
             </div>
             <div class="vital">
               <div class="caps">Lúmia</div>
@@ -133,7 +133,15 @@
     main.querySelectorAll('[data-pv]').forEach((b) => b.addEventListener('click', () => {
       const v = Number(main.querySelector('[data-pvd]').value) || 0;
       if (b.dataset.pv === 'max') c.pvAtual = d.pvMax;
-      else c.pvAtual = LD.clamp(c.pvAtual + (b.dataset.pv === '+' ? v : -v), 0, d.pvMax);
+      else {
+        const k = b.dataset.pv;
+        let delta = v;
+        if (k === '-') delta = -R.danoRecebido(v, d.reducao, false);
+        else if (k === 'agu') delta = -R.danoRecebido(v, d.reducao, true);
+        else if (k === 'dir') delta = -v;
+        c.pvAtual = LD.clamp(c.pvAtual + delta, 0, d.pvMax);
+        if (k === '-' || k === 'agu') LD.ui.toast(`${v} de dano, Redução ${k === 'agu' ? Math.min(60, d.reducao * 2) : d.reducao}%: perdeu ${-delta} PV.`);
+      }
       redesenhar();
     }));
     main.querySelectorAll('[data-lu]').forEach((b) => b.addEventListener('click', () => {
