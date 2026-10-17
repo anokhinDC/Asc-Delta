@@ -114,7 +114,7 @@
               <div style="margin-top:10px">${lumiaBar(c.lumiaAtual, d.lumiaMax, pode)}</div>
               ${pode ? `<div class="vital-ctrl"><button class="btn plain" data-lu="-1">− 1</button><button class="btn plain" data-lu="1">+ 1</button><button class="btn plain" data-lu="max">Cheia</button></div>` : ''}
             </div>
-            <div class="vital"><div class="caps">Velocidade</div><div class="v">${d.velocidade}</div><div class="muted" style="font-size:12px">Compasso: ${LD.num(c.status && c.status.agi, 1) + 5} s</div></div>
+            <div class="vital"><div class="caps">Velocidade</div><div class="v">${d.velocidade}</div><div class="muted" style="font-size:12px">Compasso: ${Math.floor(LD.num(c.status && c.status.agi, 1) / 2) + 5} s</div></div>
             <div class="vital"><div class="caps">Redução</div><div class="v">${d.reducao}<small>%</small></div><div class="muted" style="font-size:12px">Aguentar: ${Math.min(60, d.reducao * 2)}%</div></div>
             <div class="vital"><div class="caps">Crítico</div><div class="v">${d.critico}<small>%</small></div><div class="muted" style="font-size:12px">d100 ≤ ${d.critico}</div></div>
             <div class="vital"><div class="caps">Instinto</div><div class="v">${d.instinto}</div><div class="muted" style="font-size:12px">+${d.batidas} batida${d.batidas === 1 ? '' : 's'} na Janela</div></div>
