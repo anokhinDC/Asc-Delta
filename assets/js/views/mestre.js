@@ -106,7 +106,7 @@
           <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:6px">
             ${[['marcado', 'Marcado +25%'], ['vulneravel', 'Vulnerável +50%'], ['quebrado', 'Quebrado +25%'], ['fortalecido', 'Fortalecido +25%']]
               .map(([k, n]) => `<label class="check"><input type="checkbox" data-mod="${k}" ${st.mods[k] ? 'checked' : ''}>${n}</label>`).join('')}
-            <label class="check"><input type="checkbox" data-crit ${st.critico ? 'checked' : ''}>Crítico ×1,5</label>
+            <label class="check"><input type="checkbox" data-crit ${st.critico ? 'checked' : ''}>Crítico +50%</label>
           </div>
           ${A.d ? `<div class="muted" style="font-size:12.5px">Crítico de ${esc(A.c.nome)}: d100 ≤ ${A.d.critico}.</div>` : ''}
           <div class="calc-out">

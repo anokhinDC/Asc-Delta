@@ -170,10 +170,15 @@
     return s;
   }
 
-  function lumiaMaxima(nivel) {
-    let m = 6;
-    [10, 20, 30, 40].forEach((n) => { if (nivel >= n) m++; });
-    return Math.min(10, m);
+  // Pontos investidos nas Vias: cada Via começa em 1, então conta o que passa disso.
+  function pontosEmVias(s) {
+    s = s || {};
+    return VIAS.reduce((t, v) => t + Math.max(0, num(s[v.key], 1) - 1), 0);
+  }
+
+  // Lúmia máxima: 6 de base, +1 a cada 10 pontos nas Vias, no máximo 9.
+  function lumiaMaxima(s) {
+    return Math.min(9, 6 + Math.floor(pontosEmVias(s) / 10));
   }
 
   function pontosDeEco(nivel, cristais) {
@@ -205,7 +210,7 @@
 
     const bases = {};
     VIAS.forEach((v) => {
-      let b = 4 * N + 6 * num(s[v.key], 1) + num(bonus[v.key]);
+      let b = 5 * N + 7 * num(s[v.key], 1) + num(bonus[v.key]);
       if (arma && arma.via === v.key) b += num(arma.poder);
       bases[v.key] = b;
     });
@@ -221,7 +226,7 @@
       velocidade: 20 + num(s.agi, 1) + Math.floor(N / 2) + num(bonus.velocidade),
       reducao: clamp(Math.floor(num(s.def, 1) / 2) + num(bonus.reducao), 0, 50),
       critico: clamp(5 + Math.floor(num(s.sor, 1) / 2) + num(bonus.critico), 0, 50),
-      lumiaMax: lumiaMaxima(N),
+      lumiaMax: lumiaMaxima(s),
       instinto: 1 + Math.floor(num(s.agi, 1) / 25),
       batidas: Math.min(3, Math.floor(num(s.agi, 1) / 25)),
       curaAmpola,
@@ -256,7 +261,8 @@
 
   function custoHabilidade(h) {
     if (h.suprema) return clamp(num(h.custoSuprema, 7), 7, 9);
-    return clamp(num(h.perfeicoes, 1), 1, 6);
+    // Habilidades antigas não têm custo próprio: valia o número de perfeições.
+    return clamp(num(h.custo != null && h.custo !== '' ? h.custo : h.perfeicoes, 1), 1, 6);
   }
 
   function ehArea(h) {
@@ -264,28 +270,37 @@
     return !!(a && a.area);
   }
 
+  // Cada 2 perfeições certas dão +25% de dano. Habilidade em área vale metade.
+  function bonusPerfeicoes(h, alcancadas) {
+    const k = clamp(Math.floor(num(alcancadas)), 0, perfeicoesDe(h));
+    return 0.25 * Math.floor(k / 2);
+  }
+
   function multiplicador(h, alcancadas) {
-    const k = clamp(num(alcancadas), 0, h.suprema ? 6 : num(h.perfeicoes, 1));
-    return ehArea(h) ? 0.5 + 0.25 * k : 1 + 0.5 * k;
+    const m = 1 + bonusPerfeicoes(h, alcancadas);
+    return ehArea(h) ? m / 2 : m;
   }
 
   function nivelMinimo(h) {
     if (h.suprema) return 25;
-    if (num(h.perfeicoes, 1) >= 5) return 10;
+    if (perfeicoesDe(h) >= 5) return 10;
     return 1;
   }
 
   function perfeicoesDe(h) {
-    return h.suprema ? 6 : clamp(num(h.perfeicoes, 1), 1, 6);
+    return h.suprema ? 6 : clamp(num(h.perfeicoes, 2), 2, 6);
   }
 
   function tabelaHabilidade(h, base) {
     const n = perfeicoesDe(h);
     const linhas = [];
-    for (let k = 0; k <= n; k++) {
+    const ks = [];
+    for (let k = 0; k <= n; k += 2) ks.push(k);
+    if (ks[ks.length - 1] !== n) ks.push(n);
+    ks.forEach((k) => {
       const m = multiplicador(h, k);
       linhas.push({ perfeicoes: k, mult: m, valor: base != null ? Math.round(base * m) : null, perfeita: k === n });
-    }
+    });
     return linhas;
   }
 
@@ -339,7 +354,7 @@
     const via = 5 + (N - 1);
     return {
       pv: 150 + 25 * N + 20 * vig,
-      base: 4 * N + 6 * via
+      base: 5 * N + 7 * via
     };
   }
 
@@ -349,8 +364,8 @@
     const pq = pontosQuebra(m.defesa);
     const etapas = clamp(num(m.quebraEtapas, 1), 0, 5);
     const pv = num(m.pv);
-    // Dano médio do grupo por rodada: cada um ~1,75× a Base (mistura de Ataque Comum e habilidades)
-    const danoGrupo = n * ref.base * 1.75;
+    // Dano médio do grupo por rodada: cada um ~1,5× a Base (mistura de Ataque Comum e habilidades)
+    const danoGrupo = n * ref.base * 1.5;
     const ataques = (m.ataques || []).map((a) => {
       const golpes = Math.max(1, num(a.golpes, 1));
       const dano = num(a.dano);
@@ -391,8 +406,10 @@
 
   function calcularDano(o) {
     // o: base, mult, elementoMult, mods[], pontoFraco, critico
-    let d = num(o.base) * num(o.mult, 1);
-    const passos = [{ t: 'Base × multiplicador', v: Math.round(d) }];
+    // Crítico soma +50% ao multiplicador (não multiplica).
+    const mult = num(o.mult, 1) + (o.critico ? 0.5 : 0);
+    let d = num(o.base) * mult;
+    const passos = [{ t: o.critico ? 'Base × (multiplicador + 50% de crítico)' : 'Base × multiplicador', v: Math.round(d) }];
     let modTotal = 0;
     (o.mods || []).forEach((m) => (modTotal += m));
     if (modTotal) {
@@ -402,10 +419,6 @@
     if (num(o.pontoFraco, 1) !== 1) {
       d *= num(o.pontoFraco, 1);
       passos.push({ t: `Ponto fraco ×${o.pontoFraco}`, v: Math.round(d) });
-    }
-    if (o.critico) {
-      d *= 1.5;
-      passos.push({ t: 'Crítico ×1,5', v: Math.round(d) });
     }
     const em = num(o.elementoMult, 1);
     d *= em;

@@ -243,7 +243,7 @@
             <tr><td>Velocidade</td><td class="r num">${d.velocidade}</td><td class="muted">20 + AGI + Nível ÷ 2</td></tr>
             <tr><td>Redução</td><td class="r num">${d.reducao}%</td><td class="muted">DEF ÷ 2 (máx. 50%)</td></tr>
             <tr><td>Crítico</td><td class="r num">${d.critico}%</td><td class="muted">5 + SOR ÷ 2 (máx. 50%)</td></tr>
-            <tr><td>Lúmia máxima</td><td class="r num">${d.lumiaMax}</td><td class="muted">6, +1 nos níveis 10, 20, 30, 40</td></tr>
+            <tr><td>Lúmia máxima</td><td class="r num">${d.lumiaMax}</td><td class="muted">6, +1 a cada 10 pontos nas Vias (máx. 9)</td></tr>
             <tr><td>Instinto</td><td class="r num">${d.instinto}</td><td class="muted">1 + AGI ÷ 25</td></tr>
             <tr><td>Ampola de Cura</td><td class="r num">${d.curaAmpola}%</td><td class="muted">50%, +10% a cada 25 de ENG</td></tr>
             <tr><td>Pontos de Eco</td><td class="r num">${d.pontosEco}</td><td class="muted">2 + Nível ÷ 2 + Cristais de Eco</td></tr>

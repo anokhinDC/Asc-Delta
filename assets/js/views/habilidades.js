@@ -46,7 +46,7 @@
         <div class="vital" style="border:1px solid var(--line)"><div class="caps">Perfeições</div><div class="v">${n}</div>${pips(n, n)}</div>
         <div class="vital" style="border:1px solid var(--line)"><div class="caps">Compasso</div><div class="v" style="font-size:26px">${esc(forma.nome)}</div><div class="muted" style="font-size:12px">${esc(forma.ex)}</div></div>
       </div>
-      <div class="caps" style="margin-bottom:4px">Multiplicador da Base de ${esc(nomeVia(h.via))} por perfeições alcançadas${R.ehArea(h) ? ' (área: metade)' : ''}</div>
+      <div class="caps" style="margin-bottom:4px">Multiplicador da Base de ${esc(nomeVia(h.via))} por perfeições certas (+25% a cada 2)${R.ehArea(h) ? ' (área: metade)' : ''}</div>
       ${escala(h, base)}
       <div style="margin-top:18px">
         ${(h.porPerfeicao || []).filter((p) => p && p.texto).map((p) => `<div class="sig-row" style="grid-template-columns:110px 1fr"><span class="caps">Na ${esc(p.n)}ª</span><span>${esc(p.texto)}</span></div>`).join('')}
@@ -78,7 +78,9 @@
 
   function editar(h, opts) {
     const novo = !h;
-    h = Object.assign({ nome: '', via: 'gol', elemento: 'fisico', tipo: 'dano', alvo: 'unico', perfeicoes: 2, suprema: false, custoSuprema: 7, forma: 'direto', quebra: 1, porPerfeicao: [], perfeita: '', tags: [], descricao: '', origem: '' }, h ? JSON.parse(JSON.stringify(h)) : {});
+    h = Object.assign({ nome: '', via: 'gol', elemento: 'fisico', tipo: 'dano', alvo: 'unico', perfeicoes: 2, custo: 2, suprema: false, custoSuprema: 7, forma: 'direto', quebra: 1, porPerfeicao: [], perfeita: '', tags: [], descricao: '', origem: '' }, h ? JSON.parse(JSON.stringify(h)) : {});
+    if (h.custo == null || h.custo === '') h.custo = Math.min(6, h.perfeicoes || 2);
+    h.perfeicoes = Math.max(2, h.perfeicoes || 2);
     const body = `
       <form data-form>
         ${field('Nome', input('nome', h.nome, 'class="big" required placeholder="Nome da habilidade"'))}
@@ -89,7 +91,8 @@
           ${field('Alvo', select('alvo', LD.ALVOS, h.alvo))}
         </div>
         <div class="row">
-          ${field('Perfeições (1 a 6)', input('perfeicoes', h.perfeicoes, 'type="number" min="1" max="6"'), 'O custo em Lúmia é igual ao número de perfeições.')}
+          ${field('Perfeições (2 a 6)', input('perfeicoes', h.perfeicoes, 'type="number" min="2" max="6"'), 'O Compasso tem 2 números por perfeição. A cada 2 perfeições certas, +25% de dano.')}
+          ${field('Custo em Lúmia (1 a 6)', input('custo', h.custo, 'type="number" min="1" max="6"'), 'Independe das perfeições.')}
           ${field('Forma do Compasso', select('forma', LD.FORMAS.map((f) => ({ key: f.key, nome: `${f.nome} · ${f.ex}` })), h.forma))}
           ${field('Quebra', input('quebra', h.quebra, 'type="number" min="0" max="6"'))}
         </div>
@@ -147,7 +150,8 @@
           const d = LD.ui.readForm(form);
           if (!String(d.nome || '').trim()) { LD.ui.toast('Dê um nome à habilidade.', 'erro'); return; }
           const out = Object.assign(h, d);
-          out.perfeicoes = LD.clamp(Number(out.perfeicoes) || 1, 1, 6);
+          out.perfeicoes = LD.clamp(Number(out.perfeicoes) || 2, 2, 6);
+          out.custo = LD.clamp(Number(out.custo) || 1, 1, 6);
           if (out.suprema) out.perfeicoes = 6;
           out.custoSuprema = LD.clamp(Number(out.custoSuprema) || 7, 7, 9);
           out.tags = String(d.tagsTxt || '').split(',').map((s) => s.trim()).filter(Boolean);

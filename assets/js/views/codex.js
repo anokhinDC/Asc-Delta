@@ -33,7 +33,7 @@
             <div class="eyebrow">I</div><h2>Status e Vias</h2>
             <p>Dez Status, de 1 a 99. Cinco de base e cinco Vias. As Vias ocupam o lugar que a Força tem em Expedition 33: cada uma é um tipo de dano e de habilidade, com a sua própria Base.</p>
             <table class="tbl">${LD.STATUS.map((s) => `<tr><td class="serif" style="font-size:18px">${s.nome}</td><td class="caps">${s.sigla}</td><td>${esc(s.desc)}</td></tr>`).join('')}</table>
-            <p>A <b>Base</b> de uma Via é o dano que as habilidades dela multiplicam: <span class="kbd">4 × Nível + 6 × pontos na Via</span>, mais o Poder da arma (se for da mesma Via) e os bônus de pictos.</p>
+            <p>A <b>Base</b> de uma Via é o dano que as habilidades dela multiplicam: <span class="kbd">5 × Nível + 7 × pontos na Via</span>, mais o Poder da arma (se for da mesma Via) e os bônus de pictos.</p>
           </section>
 
           <section id="cx-crescer">
@@ -45,11 +45,11 @@
               <tr><td>Velocidade</td><td>20 + AGI + Nível ÷ 2</td></tr>
               <tr><td>Redução</td><td>DEF ÷ 2 % (máx. 50%)</td></tr>
               <tr><td>Crítico</td><td>5% + SOR ÷ 2 % (máx. 50%)</td></tr>
-              <tr><td>Lúmia máxima</td><td>6, +1 nos níveis 10, 20, 30 e 40</td></tr>
+              <tr><td>Lúmia máxima</td><td>6, +1 a cada 10 pontos investidos nas Vias (máx. 9)</td></tr>
               <tr><td>Instinto</td><td>1 + AGI ÷ 25 por combate</td></tr>
               <tr><td>Batidas extras</td><td>+1 com AGI 25, 50 e 75</td></tr>
             </table>
-            <div class="quote">Do nível 1 ao 40, um personagem focado em Golpe vai de 34 a 424 de Base, e de 255 a 2.010 de PV.</div>
+            <div class="quote">Do nível 1 ao 40, um personagem focado em Golpe vai de 40 a 508 de Base, e de 255 a 2.010 de PV.</div>
           </section>
 
           <section id="cx-lumia">
@@ -58,15 +58,15 @@
             <ul>
               <li>Não zera entre combates. Quem começa uma luta com menos de 2 sobe para 2.</li>
               <li>Ganha-se: Ataque Comum +1 · aparar ao menos um golpe da sequência +1 · habilidade Perfeita devolve 1 · Quebrar um inimigo +1 · Ampola de Lúmia +3 · descanso seguro enche.</li>
-              <li>Gasta-se: habilidades (custo = perfeições), disparos (1 cada), Criar (1).</li>
+              <li>Gasta-se: habilidades (o custo é definido em cada habilidade), disparos (1 cada), Criar (1).</li>
             </ul>
           </section>
 
           <section id="cx-perfeicoes">
             <div class="eyebrow">IV</div><h2>Perfeições e Compasso</h2>
-            <p>Toda habilidade tem de 1 a 6 perfeições ${pips(6, 4)}. O custo em Lúmia é igual ao número de perfeições. Supremas custam 7 a 9 e têm 6.</p>
-            <p><span class="kbd">Dano = Base × (1 + 0,5 × perfeições alcançadas)</span>. Em área, metade: <span class="kbd">0,5 + 0,25 por perfeição</span>. Errar tudo ainda acerta, com o dano de um Ataque Comum.</p>
-            <p>O Compasso: o narrador rola <span class="kbd">Nd4</span> e posta os números. O jogador responde na forma da habilidade. Conta da esquerda até o primeiro erro.</p>
+            <p>Toda habilidade tem de 2 a 6 perfeições ${pips(6, 4)}, escolhidas na criação. O custo em Lúmia é separado e vai de 1 a 6. Supremas custam 7 a 9 e têm 6 perfeições.</p>
+            <p><span class="kbd">Dano = Base × (1 + 0,25 a cada 2 perfeições certas)</span>. O crítico soma +50%. Em área, o multiplicador vale metade. Errar tudo ainda acerta, com o dano de um Ataque Comum.</p>
+            <p>O Compasso: o bot sorteia 2 números por perfeição (1 a 5). O jogador responde na forma da habilidade, dentro do tempo. Cada 2 números certos formam 1 perfeição certa.</p>
             <table class="tbl">${LD.FORMAS.map((f) => `<tr><td class="serif" style="font-size:18px">${f.nome}</td><td>${f.regra}</td><td class="muted">${f.ex}</td></tr>`).join('')}</table>
             <p>Ao vivo, o narrador conta batidas, uma mensagem curta (<span class="kbd">·</span>) por batida: perfeições + 1, mais as batidas extras da Agilidade. A resposta precisa aparecer antes da última. Sem jogo ao vivo, o Compasso vira Pulso: um d6 por perfeição, cada 3+ conta, até o primeiro 1 ou 2.</p>
             <p>Todas as perfeições: acontece o Efeito Perfeito e 1 Lúmia volta.</p>

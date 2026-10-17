@@ -10,7 +10,7 @@
   const habilidades = [
     {
       id: 'seed_hab_lamina_fio', nome: 'Lâmina de Fio', via: 'gol', elemento: 'luz', tipo: 'dano', alvo: 'unico',
-      perfeicoes: 2, forma: 'direto', quebra: 1,
+      perfeicoes: 2, custo: 2, forma: 'direto', quebra: 1,
       porPerfeicao: [],
       perfeita: 'O alvo fica Marcado.',
       tags: ['Ignora Resistência a Físico'],
@@ -19,7 +19,7 @@
     },
     {
       id: 'seed_hab_martelo', nome: 'Martelo de Trilho', via: 'gol', elemento: 'fisico', tipo: 'dano', alvo: 'unico',
-      perfeicoes: 3, forma: 'direto', quebra: 2,
+      perfeicoes: 3, custo: 3, forma: 'direto', quebra: 2,
       porPerfeicao: [{ n: 2, texto: 'Quebra +1.' }],
       perfeita: 'Quebra +2 e o alvo fica Derrubado.',
       tags: [],
@@ -28,7 +28,7 @@
     },
     {
       id: 'seed_hab_bastiao', nome: 'Bastião', via: 'res', elemento: 'luz', tipo: 'escudo', alvo: 'aliados',
-      perfeicoes: 4, forma: 'espelhado', quebra: 0,
+      perfeicoes: 4, custo: 4, forma: 'espelhado', quebra: 0,
       porPerfeicao: [],
       perfeita: 'Protegido por 2 turnos em todos os aliados.',
       tags: [],
@@ -37,7 +37,7 @@
     },
     {
       id: 'seed_hab_vigilia', nome: 'Vigília', via: 'res', elemento: 'som', tipo: 'suporte', alvo: 'aliados',
-      perfeicoes: 2, forma: 'direto', quebra: 0,
+      perfeicoes: 2, custo: 2, forma: 'direto', quebra: 0,
       porPerfeicao: [{ n: 1, texto: '−1 de Sonolência ou de Rachadura em todos.' }, { n: 2, texto: '−1 a mais.' }],
       perfeita: 'Remove Sono e Medo.',
       tags: ['Atrai a Marca do Líkho'],
@@ -46,7 +46,7 @@
     },
     {
       id: 'seed_hab_chuva_faiscas', nome: 'Chuva de Faíscas', via: 'mir', elemento: 'raio', tipo: 'dano', alvo: 'area',
-      perfeicoes: 5, forma: 'invertido', quebra: 1,
+      perfeicoes: 5, custo: 5, forma: 'invertido', quebra: 1,
       porPerfeicao: [{ n: 3, texto: 'Choque em todos.' }],
       perfeita: 'Choque e Lento em todos os inimigos.',
       tags: ['Acerta voadores sem leitura'],
@@ -55,7 +55,7 @@
     },
     {
       id: 'seed_hab_ajudante', nome: 'Pequeno Ajudante', via: 'eng', elemento: 'fisico', tipo: 'controle', alvo: 'invoca',
-      perfeicoes: 3, forma: 'somado', quebra: 0,
+      perfeicoes: 3, custo: 3, forma: 'somado', quebra: 0,
       porPerfeicao: [{ n: 1, texto: 'O construto serve de Isca por 1 turno a cada perfeição.' }],
       perfeita: 'O construto explode ao sumir: 2 × Base de Engenho em área pequena.',
       tags: [],
@@ -64,7 +64,7 @@
     },
     {
       id: 'seed_hab_criar', nome: 'Criar', via: 'eng', elemento: 'luz', tipo: 'suporte', alvo: 'si',
-      perfeicoes: 1, forma: 'direto', quebra: 0,
+      perfeicoes: 2, custo: 1, forma: 'direto', quebra: 0,
       porPerfeicao: [],
       perfeita: 'A criação dura 1 turno a mais, ou o Abrigo absorve o dobro.',
       tags: ['Exige o giz', 'Custa uma Lacuna'],
@@ -73,7 +73,7 @@
     },
     {
       id: 'seed_hab_nucleo_calor', nome: 'Brasa de Bairro', via: 'ele', elemento: 'fogo', tipo: 'dano', alvo: 'unico',
-      perfeicoes: 4, forma: 'somado', quebra: 2,
+      perfeicoes: 4, custo: 4, forma: 'somado', quebra: 2,
       porPerfeicao: [{ n: 2, texto: 'Queimadura.' }],
       perfeita: 'Queimadura e o alvo fica Vulnerável a Gelo até o fim da rodada.',
       tags: [],
@@ -82,7 +82,7 @@
     },
     {
       id: 'seed_hab_verso', nome: 'Verso que Desvia', via: 'res', elemento: 'som', tipo: 'controle', alvo: 'unico',
-      perfeicoes: 3, forma: 'invertido', quebra: 0,
+      perfeicoes: 3, custo: 3, forma: 'invertido', quebra: 0,
       porPerfeicao: [{ n: 2, texto: 'O alvo fica Distraído.' }],
       perfeita: 'O alvo gasta a próxima ação atacando uma ilusão.',
       tags: [],
