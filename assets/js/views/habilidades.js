@@ -5,16 +5,27 @@
 
   const filtros = { q: '', via: 'todas', perf: 'todas' };
 
-  // O dano é sempre pré-calculado: vem do nível e da Via, nunca de um número digitado.
-  const NIVEIS_PREVIA = [1, 5, 10, 15, 20, 30, 40];
-  function seletorDeNivel() {
-    return `<div class="field"><label>Nível de referência</label><select data-nivel>${NIVEIS_PREVIA.map((n) => `<option value="${n}"${n === 5 ? ' selected' : ''}>Nível ${n} · Base ${R.referencia(n).base}</option>`).join('')}</select></div>`;
+  // O dano é sempre pré-calculado, com o nível e a Via de quem joga: nunca um número digitado.
+  // Sem ficha vinda da tela de personagem, usa a ficha do próprio usuário (ou a de maior nível).
+  function fichaDeReferencia() {
+    const chars = LD.store.list('personagens');
+    const uid = LD.store.state && LD.store.state.user && LD.store.state.user.uid;
+    const minhas = chars.filter((c) => uid && c.ownerId === uid);
+    const lista = minhas.length ? minhas : chars;
+    return lista.slice().sort((a, b) => (Number(b.nivel) || 1) - (Number(a.nivel) || 1))[0] || null;
   }
-  function baseDaPrevia(opts, via, nivel) {
+  function baseDaPrevia(opts, via) {
     if (opts && opts.bases && opts.bases[via] != null) return opts.bases[via];
-    return R.referencia(Number(nivel) || 5).base;
+    const c = fichaDeReferencia();
+    if (!c) return R.referencia(1).base;
+    const lib = { pictos: LD.store.list('pictos'), armas: LD.store.list('armas') };
+    return R.derivados(LD.fichas.normalizar(JSON.parse(JSON.stringify(c))), lib).bases[via] || R.referencia(1).base;
   }
-
+  function notaDaPrevia(opts) {
+    if (opts && opts.bases) return 'A prévia usa a Base de quem está criando a habilidade.';
+    const c = fichaDeReferencia();
+    return c ? `A prévia usa a Base de ${esc(c.nome)}, nível ${Number(c.nivel) || 1}.` : 'Sem ficha ainda: a prévia usa a Base do nível 1.';
+  }
   function nomeVia(k) { const v = LD.byKey(LD.VIAS, k); return v ? v.nome : '—'; }
 
   function card(h) {
@@ -74,11 +85,7 @@
     if (h && !podeEditar) {
       LD.ui.openDrawer({
         eyebrow: 'Habilidade', title: h.nome,
-        body: `${opts.bases ? '' : seletorDeNivel()}<div data-leitura>${leitura(h, baseDaPrevia(opts, h.via, 5))}</div>`,
-        onMount: (el) => {
-          const b = el.querySelector('[data-nivel]');
-          if (b) b.addEventListener('change', () => { el.querySelector('[data-leitura]').innerHTML = leitura(h, baseDaPrevia(opts, h.via, b.value)); });
-        }
+        body: `<p class="muted" style="font-size:13px">${notaDaPrevia(opts)}</p><div data-leitura>${leitura(h, baseDaPrevia(opts, h.via))}</div>`,
       });
       return;
     }
@@ -124,7 +131,7 @@
         ${field('Origem', input('origem', h.origem, 'placeholder="Quem ensinou, de onde veio"'))}
       </form>
       <div class="subsect"><span>Prévia</span></div>
-      ${opts.bases ? '<p class="muted" style="font-size:13px">A prévia usa a Base de quem está criando a habilidade.</p>' : seletorDeNivel()}
+      <p class="muted" style="font-size:13px">${notaDaPrevia(opts)}</p>
       <div data-preview></div>`;
 
     const foot = `
@@ -146,11 +153,9 @@
         const preview = () => {
           const d = LD.ui.readForm(form);
           const tmp = Object.assign({}, h, d);
-          el.querySelector('[data-preview]').innerHTML = leitura(tmp, baseDaPrevia(opts, tmp.via, (el.querySelector('[data-nivel]') || {}).value));
+          el.querySelector('[data-preview]').innerHTML = leitura(tmp, baseDaPrevia(opts, tmp.via));
         };
         form.addEventListener('input', preview);
-        const nv = el.querySelector('[data-nivel]');
-        if (nv) nv.addEventListener('change', preview);
         preview();
         el.querySelector('[data-cancel]').addEventListener('click', LD.ui.closeDrawer);
         const del = el.querySelector('[data-del]');
