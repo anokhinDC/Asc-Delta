@@ -2,39 +2,147 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ------------------------------------------------------------------
+    // Quem é quem
+    // ------------------------------------------------------------------
     function logado() { return request.auth != null; }
-    function mestre() {
-      return logado() && request.auth.token.email in ['admin@beyonddepths.com', 'mestre@beyonddepths.com'];
-    }
-    function dono() { return logado() && resource.data.ownerId == request.auth.uid; }
-    function criaComoDono() { return logado() && request.resource.data.ownerId == request.auth.uid; }
 
-    // Fichas: todos leem, cada jogador mexe na sua, o mestre mexe em todas.
+    // Mestre: só estes dois e-mails exatos.
+    function mestre() {
+      return logado()
+        && request.auth.token.email != null
+        && request.auth.token.email.lower() in ['admin@beyonddepths.com', 'mestre@beyonddepths.com'];
+    }
+
+    // Dono do documento que já existe.
+    function dono() { return logado() && resource.data.ownerId == request.auth.uid; }
+
+    // Quem cria precisa se declarar dono (a pessoa não cria ficha no nome de outra).
+    function criaComoDono() {
+      return logado()
+        && request.resource.data.ownerId is string
+        && request.resource.data.ownerId == request.auth.uid;
+    }
+
+    // Quem não é mestre não pode passar o documento para outra pessoa.
+    function mantemDono() {
+      return mestre() || request.resource.data.ownerId == resource.data.ownerId;
+    }
+
+    // ------------------------------------------------------------------
+    // Limites de tamanho e de tipo (travam lixo, spam e documentos gigantes)
+    // ------------------------------------------------------------------
+    function texto(d, campo, max) {
+      return !(campo in d) || (d[campo] is string && d[campo].size() <= max);
+    }
+    function lista(d, campo, max) {
+      return !(campo in d) || (d[campo] is list && d[campo].size() <= max);
+    }
+    function mapa(d, campo, max) {
+      return !(campo in d) || (d[campo] is map && d[campo].keys().size() <= max);
+    }
+
+    // Ficha do personagem.
+    function fichaOk(d) {
+      return d.keys().size() <= 120
+        && texto(d, 'nome', 120)
+        && texto(d, 'jogador', 120)
+        && texto(d, 'conceito', 300)
+        && texto(d, 'retrato', 2000)
+        && texto(d, 'ownerName', 120)
+        && texto(d, 'embedCor', 9)
+        && texto(d, 'embedFoto', 20)
+        && texto(d, 'embedSimbolo', 8)
+        && texto(d, 'embedRodape', 120)
+        && texto(d, 'historia', 20000)
+        && texto(d, 'notas', 20000)
+        && texto(d, 'lacunas', 20000)
+        && lista(d, 'habilidades', 500)
+        && lista(d, 'habilidadesEquipadas', 50)
+        && lista(d, 'pictosPossuidos', 500)
+        && lista(d, 'pictosEquipados', 50)
+        && lista(d, 'inventario', 500)
+        && lista(d, 'ecos', 200)
+        && mapa(d, 'status', 40)
+        && mapa(d, 'ampolas', 20)
+        && mapa(d, 'dominio', 100);
+    }
+
+    // Habilidade.
+    function habilidadeOk(d) {
+      return d.keys().size() <= 80
+        && texto(d, 'nome', 120)
+        && texto(d, 'descricao', 5000)
+        && texto(d, 'perfeita', 2000)
+        && texto(d, 'origem', 300)
+        && texto(d, 'ownerName', 120)
+        && lista(d, 'porPerfeicao', 50)
+        && lista(d, 'tags', 50);
+    }
+
+    // Itens da biblioteca do mestre (picto, arma, item, monstro).
+    function bibliotecaOk(d) {
+      return d.keys().size() <= 120
+        && texto(d, 'nome', 120)
+        && texto(d, 'descricao', 8000)
+        && texto(d, 'imagem', 2000)
+        && lista(d, 'tags', 50);
+    }
+
+    // ------------------------------------------------------------------
+    // Fichas: quem está logado lê; cada jogador mexe só na sua; o mestre em todas.
+    // ------------------------------------------------------------------
     match /lumia_personagens/{id} {
       allow read: if logado();
-      allow create: if criaComoDono() || mestre();
-      allow update, delete: if dono() || mestre();
+      allow create: if (criaComoDono() || mestre()) && fichaOk(request.resource.data) && id.size() <= 80;
+      allow update: if (dono() || mestre()) && mantemDono() && fichaOk(request.resource.data);
+      allow delete: if dono() || mestre();
     }
 
     // Habilidades: jogadores criam as suas; o mestre edita todas.
     match /lumia_habilidades/{id} {
       allow read: if logado();
-      allow create: if criaComoDono() || mestre();
-      allow update, delete: if dono() || mestre();
+      allow create: if (criaComoDono() || mestre()) && habilidadeOk(request.resource.data) && id.size() <= 80;
+      allow update: if (dono() || mestre()) && mantemDono() && habilidadeOk(request.resource.data);
+      allow delete: if dono() || mestre();
     }
 
-    // Biblioteca do mestre.
-    match /lumia_pictos/{id}   { allow read: if logado(); allow write: if mestre(); }
-    match /lumia_armas/{id}    { allow read: if logado(); allow write: if mestre(); }
-    match /lumia_itens/{id}    { allow read: if logado(); allow write: if mestre(); }
-    match /lumia_monstros/{id} { allow read: if logado(); allow write: if mestre(); }
+    // Biblioteca do mestre: todos leem, só o mestre escreve.
+    match /lumia_pictos/{id} {
+      allow read: if logado();
+      allow create, update: if mestre() && bibliotecaOk(request.resource.data);
+      allow delete: if mestre();
+    }
+    match /lumia_armas/{id} {
+      allow read: if logado();
+      allow create, update: if mestre() && bibliotecaOk(request.resource.data);
+      allow delete: if mestre();
+    }
+    match /lumia_itens/{id} {
+      allow read: if logado();
+      allow create, update: if mestre() && bibliotecaOk(request.resource.data);
+      allow delete: if mestre();
+    }
+    match /lumia_monstros/{id} {
+      allow read: if logado();
+      allow create, update: if mestre() && bibliotecaOk(request.resource.data);
+      allow delete: if mestre();
+    }
 
-    // Painel antigo (pasta legacy/): mantém o acesso de quem está logado.
-    match /characters/{id}         { allow read, write: if logado(); }
-    match /monsters/{id}           { allow read, write: if logado(); }
-    match /global_skills/{id}      { allow read, write: if logado(); }
-    match /global_weapons/{id}     { allow read, write: if logado(); }
-    match /global_armors/{id}      { allow read, write: if logado(); }
-    match /global_accessories/{id} { allow read, write: if logado(); }
+    // ------------------------------------------------------------------
+    // Painel antigo (pasta legacy/): só leitura para quem está logado.
+    // Só o mestre escreve. Antes, qualquer pessoa logada apagava tudo daqui.
+    // ------------------------------------------------------------------
+    match /characters/{id}         { allow read: if logado(); allow write: if mestre(); }
+    match /monsters/{id}           { allow read: if logado(); allow write: if mestre(); }
+    match /global_skills/{id}      { allow read: if logado(); allow write: if mestre(); }
+    match /global_weapons/{id}     { allow read: if logado(); allow write: if mestre(); }
+    match /global_armors/{id}      { allow read: if logado(); allow write: if mestre(); }
+    match /global_accessories/{id} { allow read: if logado(); allow write: if mestre(); }
+
+    // Todo o resto fica negado: nenhuma coleção nova nasce aberta.
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }
