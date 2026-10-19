@@ -31,7 +31,7 @@
         <div>
           <section id="cx-status">
             <div class="eyebrow">I</div><h2>Status e Vias</h2>
-            <p>Dez Status, de 1 a 99. Cinco de base e cinco Vias. As Vias ocupam o lugar que a Força tem em Expedition 33: cada uma é um tipo de dano e de habilidade, com a sua própria Base.</p>
+            <p>Dez Status, de 1 a 99: cinco de base (Vigor, Agilidade, Defesa, Sorte e Vontade) e cinco Vias. Cada Via é um estilo de combate, com seu próprio tipo de dano, suas habilidades e a sua Base. Elas ocupam o lugar que a Força teria em outros sistemas.</p>
             <table class="tbl">${LD.STATUS.map((s) => `<tr><td class="serif" style="font-size:18px">${s.nome}</td><td class="caps">${s.sigla}</td><td>${esc(s.desc)}</td></tr>`).join('')}</table>
             <p>A <b>Base</b> de uma Via é o dano que as habilidades dela multiplicam: <span class="kbd">5 × Nível + 7 × pontos na Via</span>, mais o Poder da arma (se for da mesma Via) e os bônus de pictos.</p>
           </section>
@@ -54,10 +54,10 @@
 
           <section id="cx-lumia">
             <div class="eyebrow">III</div><h2>Lúmia</h2>
-            <p>A moeda das ações especiais, como os Pontos de Ação de Expedition 33. ${lumiaBar(3, 6)}</p>
+            <p>A energia das habilidades e das ações especiais. ${lumiaBar(3, 6)}</p>
             <ul>
               <li>Não zera entre combates. Quem começa uma luta com menos de 2 sobe para 2.</li>
-              <li>Ganha-se: Ataque Comum +1 · aparar ao menos um golpe da sequência +1 · habilidade Perfeita devolve 1 · Quebrar um inimigo +1 · Ampola de Lúmia +3 · descanso seguro enche.</li>
+              <li>Ganha-se: Ataque Comum +1 · aparar ao menos um golpe da sequência +1 · habilidade Perfeita devolve 1 · Quebrar um inimigo +1 · Ampola de Lúmia +3 · Postes e nós de Lúmia +1 fora de combate · descanso seguro enche até 50% do máximo.</li>
               <li>Gasta-se: habilidades (o custo é definido em cada habilidade), disparos (1 cada), Criar (1).</li>
             </ul>
           </section>
@@ -118,7 +118,7 @@
 
           <section id="cx-ampolas">
             <div class="eyebrow">X</div><h2>Ampolas</h2>
-            <p>As tintas de Expedition 33. Enchem nas bandeiras da Alpha e em todo descanso seguro. Usar gasta a ação.</p>
+            <p>As três Ampolas de cada Ascensor. Enchem nas bandeiras da Alpha e em todo descanso seguro. Usar gasta a ação.</p>
             <table class="tbl"><tr><td>Cura</td><td>50% do PV (+10% a cada 25 de ENG, até 80%)</td><td class="r">3 cargas</td></tr><tr><td>Lúmia</td><td>+3 Lúmia</td><td class="r">2 cargas</td></tr><tr><td>Retorno</td><td>Levanta um Caído com 50%</td><td class="r">1 carga</td></tr></table>
             <p>Três Fragmentos de Ampola: +1 carga máxima numa Ampola.</p>
           </section>
