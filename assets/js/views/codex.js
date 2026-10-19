@@ -33,7 +33,7 @@
             <div class="eyebrow">I</div><h2>Status e Vias</h2>
             <p>Dez Status, de 1 a 99: cinco de base (Vigor, Agilidade, Defesa, Sorte e Vontade) e cinco Vias. Cada Via é um estilo de combate, com seu próprio tipo de dano, suas habilidades e a sua Base. Elas ocupam o lugar que a Força teria em outros sistemas.</p>
             <table class="tbl">${LD.STATUS.map((s) => `<tr><td class="serif" style="font-size:18px">${s.nome}</td><td class="caps">${s.sigla}</td><td>${esc(s.desc)}</td></tr>`).join('')}</table>
-            <p>A <b>Base</b> de uma Via é o dano que as habilidades dela multiplicam: <span class="kbd">5 × Nível + 7 × pontos na Via</span>, mais o Poder da arma (se for da mesma Via) e os bônus de pictos.</p>
+            <p>A <b>Base</b> de uma Via é o dano que as habilidades dela multiplicam: <span class="kbd">5 × Nível + 7 × pontos na Via</span>, mais o Poder da arma (se for da mesma Via) e os bônus de pictos. O Poder da arma tem teto: no máximo <b>+30%</b> da Base se a arma não tem habilidades, e <b>+20%</b> se tem.</p>
           </section>
 
           <section id="cx-crescer">

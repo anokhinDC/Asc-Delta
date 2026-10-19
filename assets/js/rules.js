@@ -168,6 +168,20 @@
   const LIMITE_BONUS = { pv: 300, velocidade: 10, reducao: 10, critico: 10, gol: 30, mir: 30, ele: 30, res: 30, eng: 30 };
   const LIMITE_PODER = 60;
   const LIMITE_QUEBRA_ARMA = 2;
+  // Teto do Poder da arma como fração da Base da Via de quem empunha.
+  const TETO_PODER_SEM_HABILIDADE = 0.30;
+  const TETO_PODER_COM_HABILIDADE = 0.20;
+
+  function armaTemHabilidade(arma) {
+    return !!(arma && (arma.passivas || []).some((p) => p && String(p.texto || '').trim()));
+  }
+
+  // Poder que a arma realmente soma: no máximo +30% da Base (sem habilidades) ou +20% (com).
+  function poderEfetivo(arma, baseSemArma) {
+    const bruto = clamp(num(arma && arma.poder), 0, LIMITE_PODER);
+    const teto = Math.floor(Math.max(0, baseSemArma) * (armaTemHabilidade(arma) ? TETO_PODER_COM_HABILIDADE : TETO_PODER_SEM_HABILIDADE));
+    return Math.min(bruto, teto);
+  }
 
   function novoStatus() {
     const s = {};
@@ -216,7 +230,7 @@
     const bases = {};
     VIAS.forEach((v) => {
       let b = 5 * N + 7 * num(s[v.key], 1) + num(bonus[v.key]);
-      if (arma && arma.via === v.key) b += clamp(num(arma.poder), 0, LIMITE_PODER);
+      if (arma && arma.via === v.key) b += poderEfetivo(arma, b);
       bases[v.key] = b;
     });
 
@@ -475,7 +489,7 @@
     rules: {
       pontosTotais, pontosGastos, novoStatus, lumiaMaxima, pontosDeEco, aprendizados,
       derivados, validarStatus,
-      custoHabilidade, pisoDeDano, focoDe, efeitosDe, reducaoDeDano, quebraMaxima, quebraDe, LIMITE_BONUS, LIMITE_PODER, LIMITE_QUEBRA_ARMA, multiplicador, nivelMinimo, perfeicoesDe, tabelaHabilidade, ehArea,
+      custoHabilidade, pisoDeDano, focoDe, efeitosDe, reducaoDeDano, quebraMaxima, quebraDe, LIMITE_BONUS, LIMITE_PODER, LIMITE_QUEBRA_ARMA, TETO_PODER_SEM_HABILIDADE, TETO_PODER_COM_HABILIDADE, armaTemHabilidade, poderEfetivo, multiplicador, nivelMinimo, perfeicoesDe, tabelaHabilidade, ehArea,
       pontosQuebra, referencia, analiseMonstro,
       multResistencia, calcularDano, danoRecebido,
       xpParaNivel, nivelPorXp, xpDaFicha, progressoXp, xpDeInimigo

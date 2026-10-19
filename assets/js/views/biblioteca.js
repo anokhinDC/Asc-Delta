@@ -67,7 +67,7 @@
       <div class="row">
         ${field('Via', select('via', LD.VIAS.map((v) => ({ key: v.key, nome: v.nome })), a.via))}
         ${field('Elemento do Ataque Comum', select('elemento', LD.ELEMENTOS, a.elemento))}
-        ${field('Poder', input('poder', a.poder, 'type="number" min="0" max="60"'), 'Somado à Base da Via de quem empunha. No máximo 60.')}
+        ${field('Poder', input('poder', a.poder, 'type="number" min="0" max="60"'), 'Somado à Base da Via de quem empunha, limitado a +30% da Base (sem habilidades) ou +20% (com habilidades).')}
         ${field('Quebra extra', input('quebra', a.quebra, 'type="number" min="0" max="2"'), 'No máximo 2.')}
       </div>
       <div class="subsect"><span>Passivas por nível</span></div>
