@@ -27,7 +27,7 @@
   };
 
   // Quem pode criar e editar cada coleção, além do mestre.
-  const JOGADOR_PODE_CRIAR = { personagens: true, habilidades: true, pictos: false, armas: false, itens: false, monstros: false };
+  const JOGADOR_PODE_CRIAR = { personagens: true, habilidades: true, pictos: false, armas: true, itens: false, monstros: false };
 
   const forceLocal = /[?&]local=1/.test(location.search);
 

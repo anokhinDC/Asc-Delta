@@ -59,7 +59,8 @@
       <table class="tbl"><tr><td class="caps">Poder</td><td class="r num">+${esc(a.poder || 0)} na Base da Via</td></tr>
       <tr><td class="caps">Quebra extra</td><td class="r num">+${esc(a.quebra || 0)}</td></tr>
       ${(a.passivas || []).map((p) => `<tr><td class="caps">Nível ${esc(p.nivel)}</td><td>${esc(p.texto)}</td></tr>`).join('')}
-      <tr><td class="caps">Origem</td><td class="r">${esc(a.origem || '—')}</td></tr></table>`,
+      <tr><td class="caps">Origem</td><td class="r">${esc(a.origem || '—')}</td></tr>
+      ${a.ownerName ? `<tr><td class="caps">Criada por</td><td class="r">${esc(a.ownerName)}</td></tr>` : ''}</table>`,
     vazio: () => ({ nome: '', via: 'gol', elemento: 'fisico', poder: 5, quebra: 0, passivas: [], descricao: '', origem: '' }),
     form: (a) => `
       ${field('Nome', input('nome', a.nome, 'class="big"'))}
@@ -181,7 +182,7 @@
         <div>
           <div class="eyebrow">Biblioteca · Arsenal</div>
           <h1>Armas e itens</h1>
-          <p class="lead">A arma define a Via e o elemento do Ataque Comum, e soma o seu Poder à Base daquela Via. Os itens vão para o inventário das fichas.</p>
+          <p class="lead">A arma define a Via e o elemento do Ataque Comum, e soma o seu Poder à Base daquela Via. Qualquer jogador cria as suas armas e edita só as que criou; os itens vão para o inventário das fichas e são do mestre.</p>
         </div>
         ${pode ? `<button class="btn-primary" data-new>${filtros.aba === 'armas' ? 'Nova arma' : 'Novo item'}</button>` : ''}
       </header>

@@ -89,6 +89,16 @@ service cloud.firestore {
         && lista(d, 'tags', 50);
     }
 
+    // Arma: os mesmos limites da biblioteca, mais o teto de Poder e de Quebra do site.
+    function armaOk(d) {
+      return bibliotecaOk(d)
+        && texto(d, 'origem', 300)
+        && texto(d, 'ownerName', 120)
+        && lista(d, 'passivas', 20)
+        && (!('poder' in d) || (d.poder is number && d.poder >= 0 && d.poder <= 60))
+        && (!('quebra' in d) || (d.quebra is number && d.quebra >= 0 && d.quebra <= 2));
+    }
+
     // ------------------------------------------------------------------
     // Fichas: quem está logado lê; cada jogador mexe só na sua; o mestre em todas.
     // ------------------------------------------------------------------
@@ -107,16 +117,18 @@ service cloud.firestore {
       allow delete: if dono() || mestre();
     }
 
-    // Biblioteca do mestre: todos leem, só o mestre escreve.
+    // Biblioteca do mestre: todos leem, só o mestre escreve (pictos, itens e monstros).
     match /lumia_pictos/{id} {
       allow read: if logado();
       allow create, update: if mestre() && bibliotecaOk(request.resource.data);
       allow delete: if mestre();
     }
+    // Armas: qualquer pessoa logada cria as suas e mexe só nelas; o mestre mexe em todas.
     match /lumia_armas/{id} {
       allow read: if logado();
-      allow create, update: if mestre() && bibliotecaOk(request.resource.data);
-      allow delete: if mestre();
+      allow create: if (criaComoDono() || mestre()) && armaOk(request.resource.data) && id.size() <= 80;
+      allow update: if (dono() || mestre()) && mantemDono() && armaOk(request.resource.data);
+      allow delete: if dono() || mestre();
     }
     match /lumia_itens/{id} {
       allow read: if logado();
