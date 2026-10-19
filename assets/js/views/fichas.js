@@ -15,7 +15,7 @@
       nome: 'Novo Ascensor', jogador: '', conceito: '', lumiaTipo: 'Barreira', nivel: 1, xp: 0, retrato: '',
       embedCor: '#8fa9c4', embedFoto: 'miniatura', embedSimbolo: '', embedRodape: '',
       status: s, pvAtual: null, lumiaAtual: 2,
-      armaId: '', habilidades: [], habilidadesEquipadas: [],
+      armaId: '', armasPossuidas: [], habilidades: [], habilidadesEquipadas: [],
       pictosPossuidos: [], pictosEquipados: [], dominio: {}, ecos: [], cristaisEco: 0,
       ampolas: { cura: { atual: 3, max: 3 }, lumia: { atual: 2, max: 2 }, retorno: { atual: 1, max: 1 } }, fragmentos: 0,
       inventario: [], notas: '', lacunas: '', historia: ''
@@ -355,7 +355,12 @@
 
   /* ---------------- Aba: Arma e Pictos ---------------- */
   function abaEquipamento(tab, c, d, pode, io) {
-    const armas = LD.store.list('armas').slice().sort((a, b) => a.nome.localeCompare(b.nome));
+    const todasArmas = LD.store.list('armas').slice().sort((a, b) => a.nome.localeCompare(b.nome));
+    // Armas da ficha: as anexadas, mais a empunhada de antes (fichas antigas não tinham a lista).
+    const idsArmas = c.armasPossuidas.slice();
+    if (c.armaId && !idsArmas.includes(c.armaId)) idsArmas.push(c.armaId);
+    const armas = idsArmas.map((aid) => todasArmas.find((a) => a.id === aid)).filter(Boolean);
+    const armasLivres = todasArmas.filter((a) => !idsArmas.includes(a.id));
     const pictos = LD.store.list('pictos');
     const arma = d.arma;
     const possuidos = c.pictosPossuidos.map((pid) => pictos.find((p) => p.id === pid)).filter(Boolean);
@@ -390,7 +395,7 @@
       <div class="grid two" style="gap:34px;align-items:start">
         <div>
           <div class="panel-title"><h3>Arma</h3></div>
-          ${pode ? `<div class="field"><label>Empunhando</label><select data-arma><option value="">Desarmado</option>${armas.map((a) => `<option value="${esc(a.id)}" ${a.id === c.armaId ? 'selected' : ''}>${esc(a.nome)}</option>`).join('')}</select></div>` : ''}
+          ${pode ? `<div class="field"><label>Empunhando (entre as armas da ficha)</label><select data-arma><option value="">Desarmado</option>${armas.map((a) => `<option value="${esc(a.id)}" ${a.id === c.armaId ? 'selected' : ''}>${esc(a.nome)}</option>`).join('')}</select></div>` : ''}
           ${arma ? `<div class="panel framed">
             <div class="card-meta">${viaTag(arma.via)} ${elemTag(arma.elemento)}</div>
             <h3 style="margin:8px 0">${esc(arma.nome)}</h3>
@@ -400,6 +405,10 @@
               <tr><td class="caps">Poder</td><td class="r">+${esc(arma.poder || 0)} na Base de ${esc((LD.byKey(LD.VIAS, arma.via) || {}).nome)}</td></tr>
               ${(arma.passivas || []).map((p) => `<tr class="${d.nivel >= p.nivel ? 'hi' : ''}"><td class="caps">Nível ${esc(p.nivel)}</td><td>${esc(p.texto)} ${d.nivel >= p.nivel ? '' : '<span class="muted">(ainda não)</span>'}</td></tr>`).join('')}
             </table></div>` : '<div class="empty" style="padding:26px">Desarmado. O Ataque Comum usa a Base de Golpe.</div>'}
+
+          <div class="panel-title" style="margin-top:30px"><h3>Armas da ficha</h3><span class="caps">${armas.length}</span></div>
+          ${pode ? `<div style="display:flex;gap:14px;align-items:end;margin-bottom:10px"><div class="field" style="margin:0;min-width:240px"><label>Anexar da biblioteca</label><select data-asel><option value="">Escolher…</option>${armasLivres.map((a) => `<option value="${esc(a.id)}">${esc(a.nome)} · Poder +${esc(a.poder || 0)}</option>`).join('')}</select></div><button class="btn" data-aadd>Anexar</button></div>` : ''}
+          ${armas.length ? armas.map((a) => `<div class="inv-row"><div><div class="serif" style="font-size:19px">${esc(a.nome)}${a.id === c.armaId ? ' <span class="tag accent">Empunhada</span>' : ''}</div><div class="muted" style="font-size:12.5px">${esc((LD.byKey(LD.VIAS, a.via) || {}).nome || '')} · Poder +${esc(a.poder || 0)}</div></div>${pode ? `<div style="display:flex;gap:8px">${a.id === c.armaId ? '' : `<button class="btn plain" data-aeq="${esc(a.id)}">Empunhar</button>`}<button class="btn danger plain" data-arm="${esc(a.id)}">×</button></div>` : '<span></span>'}</div>`).join('') : '<div class="empty">Nenhuma arma anexada ainda.</div>'}
 
           <div class="panel-title" style="margin-top:30px"><h3>Pictos equipados</h3><span class="caps">${c.pictosEquipados.length} / ${LD.MAX_PICTOS_EQUIPADOS}</span></div>
           <div class="slot-row">${slots}</div>
@@ -419,6 +428,19 @@
 
     if (!pode) return;
     tab.querySelector('[data-arma]').addEventListener('change', (e) => { c.armaId = e.target.value; io.redesenhar(); });
+    tab.querySelector('[data-aadd]').addEventListener('click', () => {
+      const v = tab.querySelector('[data-asel]').value;
+      if (!v) return;
+      c.armasPossuidas = idsArmas.concat(v);
+      if (!c.armaId) c.armaId = v;
+      io.redesenhar();
+    });
+    tab.querySelectorAll('[data-aeq]').forEach((b) => b.addEventListener('click', () => { c.armasPossuidas = idsArmas; c.armaId = b.dataset.aeq; io.redesenhar(); }));
+    tab.querySelectorAll('[data-arm]').forEach((b) => b.addEventListener('click', () => {
+      c.armasPossuidas = idsArmas.filter((x) => x !== b.dataset.arm);
+      if (c.armaId === b.dataset.arm) c.armaId = '';
+      io.redesenhar();
+    }));
     tab.querySelector('[data-cristais]').addEventListener('change', (e) => { c.cristaisEco = Math.max(0, Number(e.target.value) || 0); io.redesenhar(); });
     tab.querySelector('[data-padd]').addEventListener('click', () => {
       const v = tab.querySelector('[data-psel]').value;
@@ -459,23 +481,27 @@
   /* ---------------- Aba: Inventário ---------------- */
   function abaInventario(tab, c, d, pode, io) {
     const itens = LD.store.list('itens').slice().sort((a, b) => a.nome.localeCompare(b.nome));
+    const exp = LD.store.expedicao();
+    const logado = !!LD.store.state.user || LD.store.state.local;
+    const mestre = LD.store.isMaster();
     const AMP = [['cura', 'Ampola de Cura', `Recupera ${d.curaAmpola}% do PV`], ['lumia', 'Ampola de Lúmia', '+3 Lúmia'], ['retorno', 'Ampola de Retorno', 'Levanta um Caído com 50% do PV']];
     tab.innerHTML = `
       <div class="grid two" style="gap:34px;align-items:start">
         <div>
-          <div class="panel-title"><h3>Ampolas</h3><span class="caps">enchem nas bandeiras da Alpha</span></div>
+          <div class="panel-title"><h3>Ampolas da expedição</h3><span class="caps">compartilhadas por todos</span></div>
+          <p class="muted" style="font-size:13px;margin:0 0 10px">As três Ampolas são do grupo inteiro: usar uma gasta a carga de toda a expedição, não só a do seu personagem.</p>
           ${AMP.map(([k, n, e]) => {
-            const a = c.ampolas[k];
+            const a = exp.ampolas[k];
             return `<div class="attr" style="grid-template-columns:1fr auto auto">
               <div><div class="name">${n}</div><div class="desc">${e}</div></div>
               <div class="pips">${Array.from({ length: a.max }, (_, i) => `<i class="pip ${i < a.atual ? 'on' : ''}"></i>`).join('')}</div>
-              ${pode ? `<div class="ctrl" style="display:flex;gap:8px;align-items:center"><button class="icon-btn" data-amp="${k}" data-dv="-1"><span>−</span></button><span class="num" style="font-size:20px;min-width:44px;text-align:center">${a.atual}/${a.max}</span><button class="icon-btn" data-amp="${k}" data-dv="1"><span>+</span></button><button class="btn plain" data-ampmax="${k}" title="Carga máxima">máx ${a.max}</button></div>` : `<span class="num">${a.atual}/${a.max}</span>`}
+              ${logado ? `<div class="ctrl" style="display:flex;gap:8px;align-items:center"><button class="icon-btn" data-amp="${k}" data-dv="-1"><span>−</span></button><span class="num" style="font-size:20px;min-width:44px;text-align:center">${a.atual}/${a.max}</span><button class="icon-btn" data-amp="${k}" data-dv="1"><span>+</span></button>${mestre ? `<button class="btn plain" data-ampmax="${k}" title="Carga máxima">máx ${a.max}</button>` : ''}</div>` : `<span class="num">${a.atual}/${a.max}</span>`}
             </div>`;
           }).join('')}
-          ${pode ? '<button class="btn" data-encher style="margin-top:14px">Descansar numa bandeira (encher tudo)</button>' : ''}
+          ${logado ? '<button class="btn" data-encher style="margin-top:14px">Descansar numa bandeira (encher tudo)</button>' : ''}
           <div class="attr" style="grid-template-columns:1fr auto">
             <div><div class="name">Fragmentos de Ampola</div><div class="desc">Três fragmentos aumentam em 1 a carga máxima de uma Ampola.</div></div>
-            ${pode ? `<input type="number" min="0" data-frag value="${esc(c.fragmentos || 0)}" style="width:80px;background:none;border:0;border-bottom:1px solid var(--line-2);color:var(--paper);font-family:var(--display);font-size:24px;text-align:center">` : `<span class="num">${esc(c.fragmentos || 0)}</span>`}
+            ${logado ? `<input type="number" min="0" max="999" data-frag value="${esc(exp.fragmentos)}" style="width:80px;background:none;border:0;border-bottom:1px solid var(--line-2);color:var(--paper);font-family:var(--display);font-size:24px;text-align:center">` : `<span class="num">${esc(exp.fragmentos)}</span>`}
           </div>
         </div>
         <div>
@@ -495,25 +521,30 @@
       </div>`;
 
     tab.querySelectorAll('[data-iver]').forEach((el) => el.addEventListener('click', () => LD.biblioteca.abrirItem(el.dataset.iver)));
+    // Ampolas e Fragmentos são da expedição: gravam no registro único, não na ficha.
+    if (logado) {
+      tab.querySelectorAll('[data-amp]').forEach((b) => b.addEventListener('click', () => {
+        const a = exp.ampolas[b.dataset.amp];
+        a.atual = LD.clamp(a.atual + Number(b.dataset.dv), 0, a.max);
+        LD.store.salvarExpedicao(exp);
+      }));
+      tab.querySelectorAll('[data-ampmax]').forEach((b) => b.addEventListener('click', () => {
+        const a = exp.ampolas[b.dataset.ampmax];
+        const v = Number(window.prompt('Carga máxima desta Ampola:', a.max));
+        if (Number.isFinite(v) && v >= 0) { a.max = Math.min(20, Math.floor(v)); a.atual = Math.min(a.atual, a.max); LD.store.salvarExpedicao(exp); }
+      }));
+      tab.querySelector('[data-encher]').addEventListener('click', () => {
+        Object.values(exp.ampolas).forEach((a) => (a.atual = a.max));
+        LD.store.salvarExpedicao(exp);
+        if (pode) { c.pvAtual = d.pvMax; c.lumiaAtual = d.lumiaMax; io.redesenhar(); }
+        LD.ui.toast(pode ? 'Descanso completo: PV, Lúmia e as Ampolas da expedição cheios.' : 'Ampolas da expedição cheias.');
+      });
+      tab.querySelector('[data-frag]').addEventListener('change', (e) => {
+        exp.fragmentos = LD.clamp(Math.floor(Number(e.target.value) || 0), 0, 999);
+        LD.store.salvarExpedicao(exp);
+      });
+    }
     if (!pode) return;
-    tab.querySelectorAll('[data-amp]').forEach((b) => b.addEventListener('click', () => {
-      const a = c.ampolas[b.dataset.amp];
-      a.atual = LD.clamp(a.atual + Number(b.dataset.dv), 0, a.max);
-      io.redesenhar();
-    }));
-    tab.querySelectorAll('[data-ampmax]').forEach((b) => b.addEventListener('click', () => {
-      const a = c.ampolas[b.dataset.ampmax];
-      const v = Number(window.prompt('Carga máxima desta Ampola:', a.max));
-      if (Number.isFinite(v) && v >= 0) { a.max = Math.min(20, v); a.atual = Math.min(a.atual, a.max); io.redesenhar(); }
-    }));
-    tab.querySelector('[data-encher]').addEventListener('click', () => {
-      Object.values(c.ampolas).forEach((a) => (a.atual = a.max));
-      c.pvAtual = d.pvMax;
-      c.lumiaAtual = d.lumiaMax;
-      LD.ui.toast('Descanso completo: PV, Lúmia e Ampolas cheios.');
-      io.redesenhar();
-    });
-    tab.querySelector('[data-frag]').addEventListener('change', (e) => { c.fragmentos = Math.max(0, Number(e.target.value) || 0); io.redesenhar(); });
     tab.querySelector('[data-iadd]').addEventListener('click', () => {
       const id = tab.querySelector('[data-isel]').value;
       const livre = tab.querySelector('[data-ilivre]').value.trim();

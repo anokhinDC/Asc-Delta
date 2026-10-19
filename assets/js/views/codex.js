@@ -118,7 +118,7 @@
 
           <section id="cx-ampolas">
             <div class="eyebrow">X</div><h2>Ampolas</h2>
-            <p>As três Ampolas de cada Ascensor. Enchem nas bandeiras da Alpha e em todo descanso seguro. Usar gasta a ação.</p>
+            <p>As três Ampolas são da expedição inteira, compartilhadas por todos os Ascensores: usar uma gasta a carga do grupo todo. Enchem nas bandeiras da Alpha e em todo descanso seguro. Usar gasta a ação.</p>
             <table class="tbl"><tr><td>Cura</td><td>50% do PV (+10% a cada 25 de ENG, até 80%)</td><td class="r">3 cargas</td></tr><tr><td>Lúmia</td><td>+3 Lúmia</td><td class="r">2 cargas</td></tr><tr><td>Retorno</td><td>Levanta um Caído com 50%</td><td class="r">1 carga</td></tr></table>
             <p>Três Fragmentos de Ampola: +1 carga máxima numa Ampola.</p>
           </section>

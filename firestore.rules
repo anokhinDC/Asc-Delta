@@ -61,7 +61,7 @@ service cloud.firestore {
         && lista(d, 'habilidadesEquipadas', 50)
         && lista(d, 'pictosPossuidos', 500)
         && lista(d, 'pictosEquipados', 50)
-        && lista(d, 'inventario', 500)
+        && lista(d, 'inventario', 500) && lista(d, 'armasPossuidas', 200)
         && lista(d, 'ecos', 200)
         && mapa(d, 'status', 40)
         && mapa(d, 'ampolas', 20)
@@ -99,6 +99,28 @@ service cloud.firestore {
         && (!('quebra' in d) || (d.quebra is number && d.quebra >= 0 && d.quebra <= 2));
     }
 
+    // Ampolas da expedição: um registro único ('atual'), compartilhado por todos.
+    function ampolaOk(a) {
+      return a is map && a.keys().hasOnly(['atual', 'max'])
+        && a.atual is int && a.max is int
+        && a.atual >= 0 && a.atual <= a.max && a.max <= 20;
+    }
+    function expedicaoOk(d) {
+      return d.keys().hasOnly(['id', 'ampolas', 'fragmentos', 'updatedAt'])
+        && d.id == 'atual'
+        && d.fragmentos is int && d.fragmentos >= 0 && d.fragmentos <= 999
+        && d.ampolas is map && d.ampolas.keys().hasOnly(['cura', 'lumia', 'retorno'])
+        && ampolaOk(d.ampolas.cura) && ampolaOk(d.ampolas.lumia) && ampolaOk(d.ampolas.retorno);
+    }
+    function maxPadrao(d) {
+      return d.ampolas.cura.max == 3 && d.ampolas.lumia.max == 2 && d.ampolas.retorno.max == 1;
+    }
+    function maxIgual(d, r) {
+      return d.ampolas.cura.max == r.ampolas.cura.max
+        && d.ampolas.lumia.max == r.ampolas.lumia.max
+        && d.ampolas.retorno.max == r.ampolas.retorno.max;
+    }
+
     // ------------------------------------------------------------------
     // Fichas: quem está logado lê; cada jogador mexe só na sua; o mestre em todas.
     // ------------------------------------------------------------------
@@ -129,6 +151,16 @@ service cloud.firestore {
       allow create: if (criaComoDono() || mestre()) && armaOk(request.resource.data) && id.size() <= 80;
       allow update: if (dono() || mestre()) && mantemDono() && armaOk(request.resource.data);
       allow delete: if dono() || mestre();
+    }
+    // Ampolas da expedição: qualquer pessoa logada gasta e recupera cargas e mexe nos
+    // Fragmentos; só o mestre muda a carga máxima (o que os Fragmentos compram) e apaga o registro.
+    match /lumia_expedicao/{id} {
+      allow read: if logado();
+      allow create: if logado() && id == 'atual' && expedicaoOk(request.resource.data)
+        && (mestre() || maxPadrao(request.resource.data));
+      allow update: if logado() && expedicaoOk(request.resource.data)
+        && (mestre() || maxIgual(request.resource.data, resource.data));
+      allow delete: if mestre();
     }
     match /lumia_itens/{id} {
       allow read: if logado();

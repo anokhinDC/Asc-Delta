@@ -23,11 +23,12 @@
     pictos: 'lumia_pictos',
     armas: 'lumia_armas',
     itens: 'lumia_itens',
-    monstros: 'lumia_monstros'
+    monstros: 'lumia_monstros',
+    expedicao: 'lumia_expedicao'
   };
 
   // Quem pode criar e editar cada coleção, além do mestre.
-  const JOGADOR_PODE_CRIAR = { personagens: true, habilidades: true, pictos: false, armas: true, itens: false, monstros: false };
+  const JOGADOR_PODE_CRIAR = { personagens: true, habilidades: true, pictos: false, armas: true, itens: false, monstros: false, expedicao: true };
 
   const forceLocal = /[?&]local=1/.test(location.search);
 
@@ -37,7 +38,7 @@
     user: null,
     local: true,
     ready: false,
-    data: { personagens: [], habilidades: [], pictos: [], armas: [], itens: [], monstros: [] }
+    data: { personagens: [], habilidades: [], pictos: [], armas: [], itens: [], monstros: [], expedicao: [] }
   };
 
   const listeners = new Set();
@@ -80,6 +81,7 @@
     if (state.local) return true;
     if (!state.user) return false;
     if (isMaster()) return true;
+    if (col === 'expedicao') return true; // Ampolas da expedição: todo mundo logado usa
     if (!item) return !!JOGADOR_PODE_CRIAR[col];
     return item.ownerId === state.user.uid;
   }
@@ -149,12 +151,14 @@
       emit();
       return Promise.resolve(item);
     }
-    if (!item.ownerId) item.ownerId = state.user.uid;
-    if (!item.ownerName) item.ownerName = (state.user.email || '').split('@')[0];
+    if (col !== 'expedicao') {
+      if (!item.ownerId) item.ownerId = state.user.uid;
+      if (!item.ownerName) item.ownerName = (state.user.email || '').split('@')[0];
+    }
     const clean = JSON.parse(JSON.stringify(item));
     // Atualiza já a cópia local, para a tela não voltar ao valor antigo enquanto o Firestore confirma.
     if (i > -1) arr[i] = clean; else arr.push(clean);
-    return state.db.collection(COLECOES[col]).doc(item.id).set(clean).then(() => item).catch((e) => {
+    return state.db.collection(COLECOES[col]).doc(item.id).set(clean, col === 'expedicao' ? { merge: true } : undefined).then(() => item).catch((e) => {
       console.error(e);
       LD.ui && LD.ui.toast('Erro ao salvar: ' + e.message, 'erro');
       throw e;
@@ -214,7 +218,27 @@
     return Promise.allSettled(jobs);
   }
 
+  // As Ampolas são da expedição inteira: um registro só, igual para todos.
+  const AMPOLAS_PADRAO = { cura: 3, lumia: 2, retorno: 1 };
+
+  function expedicao() {
+    const reg = (state.data.expedicao || []).find((x) => x.id === 'atual') || {};
+    const out = { id: 'atual', ampolas: {}, fragmentos: Math.max(0, Math.min(999, Math.floor(Number(reg.fragmentos) || 0))) };
+    Object.keys(AMPOLAS_PADRAO).forEach((k) => {
+      const a = (reg.ampolas && reg.ampolas[k]) || {};
+      const max = Math.max(0, Math.min(20, Math.floor(a.max === undefined ? AMPOLAS_PADRAO[k] : Number(a.max) || 0)));
+      const atual = Math.max(0, Math.min(max, Math.floor(a.atual === undefined ? max : Number(a.atual) || 0)));
+      out.ampolas[k] = { atual, max };
+    });
+    return out;
+  }
+
+  function salvarExpedicao(e) {
+    return save('expedicao', { id: 'atual', ampolas: e.ampolas, fragmentos: e.fragmentos });
+  }
+
   LD.store = {
+    expedicao, salvarExpedicao,
     state, init, save, remove, login, logout, isMaster, canEdit, semear, exportar, importar, newId: id,
     on: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     get: (col, itemId) => state.data[col].find((x) => x.id === itemId),
