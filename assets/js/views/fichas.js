@@ -38,7 +38,7 @@
     return `
       <article class="card" data-ficha="${esc(c.id)}" style="flex-direction:row;gap:18px;min-height:170px">
         <div class="portrait" style="width:96px;flex:none;aspect-ratio:3/4;outline-offset:3px">
-          ${c.retrato ? `<img src="${esc(c.retrato)}" alt="">` : `<span class="initial" style="font-size:54px">${esc(ini)}</span>`}
+          ${c.retrato ? `<img src="${esc(c.retrato)}" alt="" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'initial',textContent:'${esc(ini)}',style:'font-size:54px'}))">` : `<span class="initial" style="font-size:54px">${esc(ini)}</span>`}
         </div>
         <div style="flex:1;display:flex;flex-direction:column;gap:7px;min-width:0">
           <div class="card-meta"><span class="tag ice">Nível ${esc(d.nivel)}</span><span class="tag">${esc(c.lumiaTipo || '')}</span></div>
@@ -94,7 +94,7 @@
       <a href="#/fichas" class="btn plain" style="margin-bottom:22px">← Fichas</a>
       <section class="char-hero">
         <div class="portrait">
-          ${c.retrato ? `<img src="${esc(c.retrato)}" alt="">` : `<span class="initial">${esc(ini)}</span>`}
+          ${c.retrato ? `<img src="${esc(c.retrato)}" alt="" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'initial',textContent:'${esc(ini)}'}))">` : `<span class="initial">${esc(ini)}</span>`}
           <div class="lvl"><span class="caps">Nível</span><b>${esc(d.nivel)}</b></div>
         </div>
         <div>
