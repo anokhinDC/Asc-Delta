@@ -94,18 +94,28 @@
       emit();
       return;
     }
-    let pend = Object.keys(COLECOES).length;
+    // Pronto quando cada coleção respondeu (dados ou erro) uma vez. Se alguma não responder em 8 s
+    // (rede ruim, aba antiga), libera a tela mesmo assim em vez de ficar carregando para sempre.
+    const faltam = new Set(Object.keys(COLECOES));
+    const liberar = () => { if (!state.ready) { state.ready = true; emit(); } };
+    const respondeu = (col) => { faltam.delete(col); if (!faltam.size) liberar(); };
+    setTimeout(() => {
+      if (state.ready) return;
+      console.warn('Coleções sem resposta em 8 s:', Array.from(faltam).join(', '));
+      LD.ui && LD.ui.toast('Algumas coleções demoraram a responder. Se faltar algo, recarregue a página.', 'erro');
+      liberar();
+    }, 8000);
     Object.entries(COLECOES).forEach(([col, name]) => {
       const u = state.db.collection(name).onSnapshot(
         (snap) => {
           state.data[col] = snap.docs.map((d) => d.data());
-          if (pend > 0 && --pend === 0) state.ready = true;
+          respondeu(col);
           emit();
         },
         (err) => {
           console.error('Firestore', name, err);
           LD.ui && LD.ui.toast(`Sem acesso à coleção ${name}. Veja o README (regras do Firestore).`, 'erro');
-          if (pend > 0 && --pend === 0) state.ready = true;
+          respondeu(col);
           emit();
         }
       );
